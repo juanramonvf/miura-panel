@@ -1,0 +1,34 @@
+# Credenciales y configuración privada
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.p12
+*.pfx
+id_rsa
+id_ed25519
+*.sqlite
+*.sqlite3
+*.db
+
+# SSH
+.ssh/
+authorized_keys
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+
+# Temporales y copias
+*.log
+*.bak
+*.tmp
+*.tar.gz
+*.zip
+
+# Informes privados de preparación
+AUDIT-REPORT.json
+READ-ME-FIRST.txt

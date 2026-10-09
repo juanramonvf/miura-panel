@@ -1,0 +1,2241 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Miura Panel · Estado</title><link rel="icon" type="image/png" href="/assets/sep-logo.png">
+<style>
+:root{color-scheme:dark;--bg:#0b0f16;--card:#141924;--line:#283245;--text:#f4f7fb;--muted:#98a5b8;--ok:#3fb950;--warn:#d29922;--bad:#f85149;--accent:#58a6ff;--title:#dce8ff}
+*{box-sizing:border-box}html,body{margin:0;min-width:0;background:var(--bg);color:var(--text);font:14px/1.45 system-ui,-apple-system,Segoe UI,Roboto,sans-serif}.wrap{width:min(1540px,100%);margin:auto;padding:18px}.head{margin-bottom:8px}.head h1{font-size:34px;margin:0;font-weight:900;letter-spacing:.2px}.small{color:var(--muted);font-size:12px}.grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px}.card{background:linear-gradient(180deg,#151b27,#121722);border:1px solid var(--line);border-radius:16px;padding:14px;min-width:0;box-shadow:0 8px 22px rgba(0,0,0,.22)}.metric{font-size:clamp(24px,2vw,34px);font-weight:900;margin:4px 0 1px}.label{color:var(--muted);font-size:12px;text-transform:uppercase;letter-spacing:.08em;font-weight:800}.bar{height:8px;background:#262b34;border-radius:99px;overflow:hidden;margin-top:9px}.fill{height:100%;background:var(--accent);border-radius:99px}.fill.warn{background:var(--warn)}.fill.bad{background:var(--bad)}.section{margin-top:14px}.section-title{display:flex;align-items:center;gap:10px;margin:0 0 10px}.section-title h2{font-size:22px;line-height:1.1;margin:0;color:var(--title);font-weight:900;letter-spacing:.02em}.section-title::before{content:"";display:inline-block;width:6px;height:24px;border-radius:99px;background:linear-gradient(180deg,var(--accent),#8bcbff)}.diskrow{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px}.mount{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.charts{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}.chart{height:190px;width:100%;display:block}.legend{display:flex;gap:12px;flex-wrap:wrap;color:var(--muted);font-size:12px}.table{width:100%;border-collapse:collapse}.table th,.table td{text-align:left;padding:8px 6px;border-bottom:1px solid var(--line);vertical-align:top}.table th{color:var(--muted);font-weight:700;text-transform:uppercase;letter-spacing:.06em;font-size:11px}.pill{display:inline-block;padding:2px 7px;border-radius:999px;font-size:10px;font-weight:900;letter-spacing:.04em;background:#252a33;white-space:nowrap}.pill.oktxt{color:#67d477;background:rgba(63,185,80,.13)}.pill.badtxt{color:#ff7b72;background:rgba(248,81,73,.13)}.pill.warntext{color:#e3b341;background:rgba(210,153,34,.16)}button.pill.warntext{border:0;cursor:pointer;font:inherit;font-size:10px;font-weight:900;letter-spacing:.04em}button.pill.warntext:hover{background:rgba(210,153,34,.28)}button.pill.warntext:disabled{opacity:.45;cursor:not-allowed}.pill.muted{color:#aab4c3}.containers{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px}.container{border:1px solid var(--line);border-radius:10px;padding:9px 10px;overflow:hidden;background:rgba(255,255,255,.01)}.container.update{border-color:rgba(210,153,34,.55);background:rgba(210,153,34,.07)}.container b{display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.container-head{display:flex;align-items:center;justify-content:space-between;gap:6px}.docker-actions{display:flex;gap:7px;align-items:center;flex-wrap:wrap}.btn{appearance:none;border:1px solid rgba(88,166,255,.45);background:rgba(88,166,255,.12);color:#9dcbff;border-radius:8px;padding:6px 9px;font:inherit;font-size:11px;font-weight:850;cursor:pointer}.btn:hover{background:rgba(88,166,255,.2)}.btn.warnbtn{border-color:rgba(210,153,34,.55);background:rgba(210,153,34,.14);color:#e3b341}.btn.warnbtn:hover{background:rgba(210,153,34,.23)}.btn:disabled{opacity:.45;cursor:not-allowed}.action-status{display:none;margin:8px 0 10px;padding:8px 10px;border:1px solid var(--line);background:#101621;border-radius:9px;font-size:12px}.action-status.show{display:block}.action-status.error{border-color:rgba(248,81,73,.5);color:#ff9b96}.action-status.done{border-color:rgba(63,185,80,.45);color:#7dde8b}.versions{display:grid;grid-template-columns:1fr;gap:1px;margin-top:6px;font-size:11px;color:var(--muted)}.versions strong{color:var(--text);font-weight:700}.top-alerts{display:none;margin:8px 0 13px;padding:8px 11px;border-radius:10px;border:1px solid rgba(210,153,34,.45);background:rgba(210,153,34,.16);color:#e3b341;font-size:12px;font-weight:700}.top-alerts.show{display:block}.top-alerts span+span::before{content:" · ";opacity:.75}.footer{margin:16px 0 2px;color:var(--muted);font-size:12px}.live-dot{display:inline-block;width:7px;height:7px;border-radius:50%;background:var(--ok);margin-right:6px;box-shadow:0 0 8px rgba(63,185,80,.65)}.disk-name{font-size:18px;font-weight:900;color:var(--title);margin-bottom:2px}.disk-dev{font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.06em}
+@media(max-width:1100px){.grid{grid-template-columns:repeat(2,minmax(0,1fr))}.charts{grid-template-columns:1fr}.containers{grid-template-columns:repeat(2,minmax(0,1fr))}.diskrow{grid-template-columns:repeat(3,minmax(0,1fr))}}
+@media(max-width:900px){.diskrow{grid-template-columns:1fr}}
+@media(max-width:520px){.wrap{padding:11px}.grid,.containers{grid-template-columns:1fr}.card{padding:12px}.chart{height:160px}.metric{font-size:24px}.head h1{font-size:28px}.section-title h2{font-size:19px}.top-alerts span{display:block}.top-alerts span+span::before{content:""}}
+
+.head-top{display:flex;align-items:flex-end;justify-content:space-between;gap:12px;flex-wrap:wrap}
+.identity{display:flex;align-items:center;justify-content:flex-end;gap:6px;flex-wrap:wrap}
+.nettag{display:inline-flex;align-items:center;gap:5px;border:1px solid var(--line);background:#111722;border-radius:8px;padding:4px 7px;font-size:11px;color:var(--text);white-space:nowrap}
+.nettag b{font-size:9px;letter-spacing:.06em;color:var(--muted)}
+.nettag.lan{border-color:rgba(88,166,255,.50)}
+.nettag.public{border-color:rgba(210,153,34,.55)}
+.nettag.vpn{border-color:rgba(63,185,80,.48)}
+.mountrow{display:flex;align-items:center;gap:7px;min-width:0}
+.mountrow .mount{flex:1;min-width:0}
+.copy-path{flex:0 0 auto;border:1px solid rgba(88,166,255,.38);background:rgba(88,166,255,.10);color:#9dcbff;border-radius:7px;padding:3px 7px;font:inherit;font-size:10px;font-weight:800;cursor:pointer}
+.copy-path:hover{background:rgba(88,166,255,.20)}
+.disk-info{margin-top:3px}
+@media(max-width:700px){.head-top{align-items:flex-start}.identity{justify-content:flex-start}}
+
+
+/* ===== Layout v3 ===== */
+.head{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:24px;align-items:start;margin-bottom:12px}
+.head-left{min-width:0}.head h1{font-size:34px;margin:0;font-weight:900;letter-spacing:.2px}
+.identity{display:flex;flex-direction:column;align-items:stretch;gap:5px;min-width:190px}
+.nettag{display:flex;align-items:center;justify-content:space-between;gap:12px;border:1px solid var(--line);background:#111722;border-radius:8px;padding:5px 8px;font-size:11px;color:var(--text);white-space:nowrap}
+.nettag b{font-size:9px;letter-spacing:.06em;color:var(--muted)}
+.nettag.public{border-color:rgba(210,153,34,.58)}.nettag.lan{border-color:rgba(88,166,255,.55)}.nettag.vpn{border-color:rgba(63,185,80,.48)}
+.top-alerts{display:none;margin:8px 0 0;padding:7px 10px;border-radius:9px;border:1px solid rgba(210,153,34,.48);background:rgba(210,153,34,.15);color:#e3b341;font-size:11px;font-weight:750}
+.top-alerts.show{display:block}
+.summary-card{margin-bottom:12px;padding:10px 12px}.summary-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px}
+.summary-item{border:1px solid var(--line);border-radius:10px;padding:8px 10px;background:rgba(255,255,255,.015)}
+.summary-item .summary-label{color:var(--muted);font-size:10px;text-transform:uppercase;letter-spacing:.06em;font-weight:800}
+.summary-item .summary-value{margin-top:2px;font-size:14px;font-weight:850}
+.realtime-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px}
+.disk-card{position:relative}.disk-head{display:flex;align-items:flex-start;justify-content:space-between;gap:8px}.disk-health{flex:0 0 auto}
+.disk-temp{display:inline-flex;align-items:center;gap:5px;margin-top:7px;padding:5px 8px;border-radius:8px;font-size:14px;font-weight:900;background:rgba(63,185,80,.10);color:#67d477;border:1px solid rgba(63,185,80,.25)}
+.disk-temp.warn{color:#e3b341;background:rgba(210,153,34,.12);border-color:rgba(210,153,34,.30)}
+.disk-temp.bad{color:#ff7b72;background:rgba(248,81,73,.12);border-color:rgba(248,81,73,.30)}
+.disk-details{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:6px;margin-top:8px}
+.disk-detail{border:1px solid rgba(255,255,255,.055);border-radius:7px;padding:5px 6px;min-width:0}
+.disk-detail span{display:block;color:var(--muted);font-size:9px;text-transform:uppercase;letter-spacing:.05em}
+.disk-detail strong{display:block;margin-top:1px;font-size:11px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.mountrow{display:flex;align-items:center;gap:7px;min-width:0;margin-top:5px}.mountrow .mount{flex:1;min-width:0}
+.copy-path{flex:0 0 auto;border:1px solid rgba(88,166,255,.38);background:rgba(88,166,255,.10);color:#9dcbff;border-radius:7px;padding:3px 7px;font:inherit;font-size:10px;font-weight:800;cursor:pointer}
+.copy-path:hover{background:rgba(88,166,255,.20)}
+@media(max-width:1100px){.summary-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.realtime-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media(max-width:760px){.head{grid-template-columns:1fr;gap:10px}.identity{width:100%;min-width:0}.nettag{width:100%}.realtime-grid{grid-template-columns:1fr}}
+@media(max-width:520px){.summary-grid{grid-template-columns:1fr 1fr}.disk-details{grid-template-columns:repeat(3,minmax(0,1fr))}.head h1{font-size:28px}}
+
+
+/* ===== Layout v4 ===== */
+:root{
+  --ok-soft:rgba(63,185,80,.10);
+  --warn-soft:rgba(210,153,34,.11);
+  --bad-soft:rgba(248,81,73,.11);
+}
+.head{
+  display:grid;
+  grid-template-columns:minmax(0,1fr) 220px;
+  gap:24px;
+  align-items:start;
+  margin-bottom:22px
+}
+.head-left{min-width:0}
+.head h1{font-size:34px;margin:0;font-weight:900;letter-spacing:.2px}
+#sub{margin-top:3px}
+.hw-ram{color:var(--text);font-weight:800}
+.identity{display:flex;flex-direction:column;align-items:stretch;gap:6px;min-width:0}
+.nettag{display:flex;align-items:center;gap:8px;min-width:0;border:1px solid var(--line);background:#111722;border-radius:9px;padding:5px 7px;font-size:11px;color:var(--text)}
+.nettag b{flex:0 0 64px;font-size:9px;letter-spacing:.05em;color:var(--muted)}
+.nettag .netvalue{flex:1;text-align:right;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.netcopy{flex:0 0 auto;border:0;background:transparent;color:#8fbdf0;font:inherit;font-size:12px;cursor:pointer;padding:1px 2px}
+.netcopy:hover{color:#c7e2ff}
+.nettag.public{border-color:rgba(210,153,34,.48)}
+.nettag.lan{border-color:rgba(88,166,255,.42)}
+.nettag.vpn{border-color:rgba(63,185,80,.38)}
+.top-alerts{display:none;margin:8px 0 0;padding:0;border:0;background:transparent;color:#e3b341;font-size:11px;font-weight:750}
+.top-alerts.show{display:block}
+.top-alerts span{display:block;position:relative;padding-left:13px;margin-top:3px}
+.top-alerts span::before{content:'•';position:absolute;left:2px;top:0;color:#e3b341}
+.top-alerts span+span::before{content:'•';opacity:1}
+.dashboard-section{margin-top:30px}
+.dashboard-section:first-of-type{margin-top:0}
+.section-title{margin-bottom:14px}
+.section-title h2{display:flex;align-items:center;gap:8px}
+.section-title h2 .secicon{color:#7ab7ff;font-size:15px;opacity:.9}
+#summarySection{margin-top:0}
+#summarySection .section-title{margin-bottom:10px}
+.summary-card{margin-bottom:0;padding:10px 12px;border-color:#26344a;background:linear-gradient(180deg,#151c29,#121823)}
+.summary-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px}
+.summary-item{position:relative;overflow:hidden;border:1px solid var(--line);border-radius:11px;padding:9px 10px 9px 13px;background:rgba(255,255,255,.012)}
+.summary-item::before{content:'';position:absolute;left:0;top:0;bottom:0;width:3px;background:#4b617d}
+.summary-item.sum-docker::before{background:#58a6ff}.summary-item.sum-services::before{background:#56d364}.summary-item.sum-debian::before{background:#bc8cff}.summary-item.sum-dockerup::before{background:#79c0ff}.summary-item.sum-cpu::before{background:#58a6ff}.summary-item.sum-ram::before{background:#7ee787}.summary-item.sum-temp::before{background:#d29922}.summary-item.sum-net::before{background:#a5d6ff}
+.summary-item .summary-label{color:var(--muted);font-size:10px;text-transform:uppercase;letter-spacing:.055em;font-weight:800}
+.summary-item .summary-value{margin-top:2px;font-size:14px;font-weight:850}
+.status-value.ok{color:#67d477}.status-value.warn{color:#e3b341}.status-value.bad{color:#ff7b72}
+.metric.status-value{display:inline-block}
+.diskrow{gap:16px}
+.disk-card{position:relative;border-top-width:2px}
+.disk-card:nth-child(3n+1){border-top-color:rgba(88,166,255,.55)}
+.disk-card:nth-child(3n+2){border-top-color:rgba(126,231,135,.45)}
+.disk-card:nth-child(3n+3){border-top-color:rgba(188,140,255,.45)}
+.disk-temp{display:inline-flex;align-items:center;gap:5px;margin-top:7px;padding:5px 8px;border-radius:8px;font-size:14px;font-weight:900;border:1px solid var(--line)}
+.disk-temp.ok{color:#67d477;background:var(--ok-soft);border-color:rgba(63,185,80,.25)}
+.disk-temp.warn{color:#e3b341;background:var(--warn-soft);border-color:rgba(210,153,34,.30)}
+.disk-temp.bad{color:#ff7b72;background:var(--bad-soft);border-color:rgba(248,81,73,.30)}
+.fill.ok{background:var(--ok)}.fill.warn{background:var(--warn)}.fill.bad{background:var(--bad)}
+.realtime-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:16px}
+#dockerSection{margin-top:32px}
+@media(max-width:1100px){.summary-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.realtime-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media(max-width:760px){.head{grid-template-columns:1fr;gap:12px}.identity{width:100%}.nettag{width:100%}.realtime-grid{grid-template-columns:1fr}}
+@media(max-width:520px){.summary-grid{grid-template-columns:1fr}.diskrow{gap:12px}.dashboard-section{margin-top:24px}.head h1{font-size:28px}}
+
+
+/* ===== Layout v5 ===== */
+
+/* Cabecera: bloque principal centrado + IPs a la derecha */
+.head{
+  display:grid !important;
+  grid-template-columns:minmax(0,1fr) 220px !important;
+  gap:24px !important;
+  align-items:start !important;
+  margin-bottom:28px !important;
+}
+
+.head-left{
+  min-width:0;
+  text-align:center;
+  justify-self:center;
+  width:min(760px,100%);
+}
+
+/* RAM igual que el resto del texto de hardware */
+.hw-ram{
+  color:inherit !important;
+  font-weight:inherit !important;
+}
+
+/* Avisos compactos, centrados como bloque y uno debajo de otro */
+.top-alerts{
+  width:max-content;
+  max-width:100%;
+  margin:8px auto 0 !important;
+  text-align:left;
+}
+
+/* Resumen claramente separado de la cabecera */
+#summarySection{
+  margin-top:0 !important;
+  margin-bottom:30px !important;
+}
+
+#summarySection > .section-title{
+  display:flex !important;
+  margin:0 0 12px !important;
+}
+
+/* Más aire antes de Discos */
+#disksSection{
+  margin-top:34px !important;
+}
+
+#disksSection > .section-title{
+  margin-bottom:14px !important;
+}
+
+/* Tiempo real y Docker también separados */
+#realtimeSection{
+  margin-top:34px !important;
+}
+
+#dockerSection{
+  margin-top:36px !important;
+}
+
+/* El resumen queda en 4 tarjetas */
+#summarySection .summary-grid{
+  grid-template-columns:repeat(4,minmax(0,1fr)) !important;
+}
+
+@media(max-width:1100px){
+  #summarySection .summary-grid{
+    grid-template-columns:repeat(2,minmax(0,1fr)) !important;
+  }
+}
+
+@media(max-width:760px){
+  .head{
+    grid-template-columns:1fr !important;
+    gap:14px !important;
+  }
+
+  .head-left{
+    justify-self:stretch;
+    width:100%;
+  }
+
+  .identity{
+    width:100%;
+  }
+
+  #disksSection,
+  #realtimeSection,
+  #dockerSection{
+    margin-top:28px !important;
+  }
+}
+
+@media(max-width:520px){
+  #summarySection .summary-grid{
+    grid-template-columns:1fr !important;
+  }
+}
+
+
+/* ===== Header v7 ===== */
+.head{
+  display:grid !important;
+  grid-template-columns:220px minmax(0,1fr) 220px !important;
+  gap:18px !important;
+  align-items:start !important;
+  margin-bottom:30px !important;
+}
+
+.head-left{
+  min-width:0 !important;
+  width:100% !important;
+  justify-self:stretch !important;
+  text-align:center !important;
+}
+
+.title-card{
+  width:100%;
+  min-height:118px;
+  display:flex;
+  flex-direction:column;
+  justify-content:center;
+  align-items:center;
+  padding:16px 22px;
+  border:1px solid var(--line);
+  border-radius:16px;
+  background:linear-gradient(180deg,#151b27,#121722);
+  box-shadow:0 8px 22px rgba(0,0,0,.20);
+}
+
+.title-card h1{
+  margin:0 0 7px !important;
+  font-size:38px !important;
+  line-height:1.05;
+  color:var(--title);
+}
+
+.title-card #sub{
+  margin:0 !important;
+  color:var(--muted);
+  font-size:12px;
+}
+
+.title-card .top-alerts{
+  width:auto !important;
+  max-width:100% !important;
+  margin:9px 0 0 !important;
+  text-align:center !important;
+}
+
+.weather-identity{
+  display:flex;
+  flex-direction:column;
+  gap:6px;
+  min-width:0;
+}
+
+.weather-card{
+  min-height:118px;
+  display:flex;
+  flex-direction:column;
+  justify-content:center;
+  padding:12px 14px;
+  border:1px solid rgba(88,166,255,.35);
+  border-radius:14px;
+  background:linear-gradient(180deg,#151b27,#121722);
+}
+
+.weather-city{
+  color:var(--title);
+  font-size:15px;
+  font-weight:900;
+  line-height:1.2;
+}
+
+.weather-main{
+  display:flex;
+  align-items:center;
+  gap:8px;
+  margin-top:7px;
+}
+
+.weather-icon{
+  font-size:25px;
+  line-height:1;
+}
+
+.weather-temp{
+  color:var(--text);
+  font-size:20px;
+  font-weight:900;
+}
+
+.weather-desc{
+  margin-top:4px;
+  color:var(--muted);
+  font-size:11px;
+}
+
+.weather-time{
+  margin-top:7px;
+  color:#9dcbff;
+  font-size:13px;
+  font-weight:850;
+}
+
+.identity{
+  min-width:0 !important;
+}
+
+.nettag{
+  min-height:24px;
+}
+
+@media(max-width:980px){
+  .head{
+    grid-template-columns:1fr 1fr !important;
+  }
+
+  .head-left{
+    grid-column:1 / -1;
+    grid-row:1;
+  }
+
+  .weather-identity{
+    grid-column:1;
+    grid-row:2;
+  }
+
+  .identity{
+    grid-column:2;
+    grid-row:2;
+  }
+
+  .title-card{
+    min-height:auto;
+  }
+}
+
+@media(max-width:620px){
+  .head{
+    grid-template-columns:1fr !important;
+  }
+
+  .head-left,
+  .weather-identity,
+  .identity{
+    grid-column:1 !important;
+  }
+
+  .head-left{grid-row:1}
+  .weather-identity{grid-row:2}
+  .identity{grid-row:3}
+
+  .title-card h1{
+    font-size:30px !important;
+  }
+}
+
+
+/* ===== Header v8 ===== */
+.weather-card,
+.title-card,
+.identity-card{
+  position:relative;
+  overflow:hidden;
+  min-height:118px;
+  background-image:
+    linear-gradient(90deg,#aa151b 0 18%, #f1bf00 18% 82%, #aa151b 82% 100%),
+    linear-gradient(180deg,#151b27,#121722);
+  background-size:100% 4px,100% 100%;
+  background-repeat:no-repeat,no-repeat;
+  background-position:top left,left top;
+}
+
+.identity{
+  align-self:stretch;
+  min-width:0;
+}
+
+.identity-card{
+  height:100%;
+  display:flex;
+  flex-direction:column;
+  justify-content:center;
+  gap:6px;
+  padding:12px 14px;
+  border:1px solid rgba(88,166,255,.35);
+  border-radius:14px;
+  box-shadow:0 8px 22px rgba(0,0,0,.20);
+}
+
+.identity-card .nettag{
+  margin:0;
+}
+
+@media(max-width:980px){
+  .identity-card,
+  .weather-card,
+  .title-card{
+    min-height:auto;
+  }
+}
+
+
+/* ===== Header v9 ===== */
+
+/* Las tres zonas quedan perfectamente alineadas en altura */
+.head{
+  align-items:stretch !important;
+}
+
+.weather-identity,
+.head-left,
+.identity{
+  height:100%;
+  min-height:118px;
+}
+
+.weather-card,
+.title-card,
+.identity-card{
+  height:100% !important;
+  min-height:118px !important;
+  box-sizing:border-box;
+  background-image:none !important;
+}
+
+/* Izquierda y derecha: rojo España, muy contenido */
+.weather-card,
+.identity-card{
+  border-color:rgba(170,21,27,.72) !important;
+  background:
+    linear-gradient(180deg,rgba(170,21,27,.16),rgba(170,21,27,.05) 34%,#121722 100%) !important;
+  box-shadow:
+    inset 0 3px 0 rgba(170,21,27,.90),
+    0 8px 22px rgba(0,0,0,.20) !important;
+}
+
+/* Centro: amarillo España, sin convertirlo en una bandera literal */
+.title-card{
+  border-color:rgba(241,191,0,.62) !important;
+  background:
+    linear-gradient(180deg,rgba(241,191,0,.13),rgba(241,191,0,.035) 34%,#121722 100%) !important;
+  box-shadow:
+    inset 0 3px 0 rgba(241,191,0,.92),
+    0 8px 22px rgba(0,0,0,.20) !important;
+}
+
+/* La tarjeta de IP mantiene exactamente la misma caja que las otras */
+.identity-card{
+  display:flex !important;
+  flex-direction:column;
+  justify-content:center !important;
+  gap:6px;
+  padding:12px 14px !important;
+}
+
+/* Evitar que las filas de IP hagan crecer la tarjeta */
+.identity-card .nettag{
+  min-height:0 !important;
+  padding:4px 7px !important;
+  line-height:1.2;
+}
+
+/* Responsive: al apilarse dejan de forzar una altura fija */
+@media(max-width:980px){
+  .weather-identity,
+  .head-left,
+  .identity{
+    min-height:0;
+  }
+
+  .weather-card,
+  .title-card,
+  .identity-card{
+    min-height:0 !important;
+    height:auto !important;
+  }
+}
+
+
+/* ===== Header v10 neutral + bandera ===== */
+
+/* Quitar los colores rojo/amarillo de las tarjetas */
+.weather-card,
+.title-card,
+.identity-card {
+  border-color:var(--line) !important;
+  background:linear-gradient(180deg,#151b27,#121722) !important;
+  box-shadow:0 8px 22px rgba(0,0,0,.20) !important;
+}
+
+/* Bandera pequeña dentro de la tarjeta central */
+.title-card {
+  position:relative !important;
+  overflow:hidden !important;
+}
+
+.spain-flag-mark {
+  position:absolute;
+  top:9px;
+  left:12px;
+  width:86px;
+  height:auto;
+  max-height:48px;
+  object-fit:contain;
+  pointer-events:none;
+  user-select:none;
+  opacity:.96;
+}
+
+@media(max-width:620px){
+  .spain-flag-mark {
+    width:68px;
+    top:8px;
+    left:10px;
+  }
+}
+
+
+/* ===== Header v11 ===== */
+
+/* Tarjeta central con azul neón suave */
+.title-card{
+  border:1px solid rgba(88,166,255,.78) !important;
+  box-shadow:
+    0 0 0 1px rgba(88,166,255,.12),
+    0 0 14px rgba(88,166,255,.18),
+    0 8px 22px rgba(0,0,0,.20) !important;
+}
+
+/* Bandera más cerca del título */
+.spain-flag-mark{
+  width:62px !important;
+  top:17px !important;
+  left:calc(50% - 112px) !important;
+  opacity:.96 !important;
+}
+
+@media(max-width:620px){
+  .spain-flag-mark{
+    width:52px !important;
+    top:14px !important;
+    left:calc(50% - 94px) !important;
+  }
+}
+
+
+/* ===== Header v12 ===== */
+
+/* Bandera + título en flujo normal: nunca se pisan */
+.title-card{
+  display:grid !important;
+  grid-template-columns:1fr auto 1fr !important;
+  grid-template-rows:auto auto auto !important;
+  column-gap:10px !important;
+  align-content:center !important;
+  align-items:center !important;
+}
+
+.spain-flag-mark{
+  position:static !important;
+  grid-column:1 !important;
+  grid-row:1 !important;
+  justify-self:end !important;
+  align-self:center !important;
+  width:48px !important;
+  height:auto !important;
+  max-height:34px !important;
+  margin:0 !important;
+  opacity:.96 !important;
+}
+
+.title-card h1{
+  grid-column:2 !important;
+  grid-row:1 !important;
+  margin:0 !important;
+  max-width:min(100%,620px) !important;
+  line-height:1.05 !important;
+  white-space:normal !important;
+  overflow-wrap:anywhere !important;
+  text-align:center !important;
+}
+
+.title-card #sub{
+  grid-column:1 / -1 !important;
+  grid-row:2 !important;
+  margin-top:7px !important;
+}
+
+.title-card .top-alerts{
+  grid-column:1 / -1 !important;
+  grid-row:3 !important;
+  margin-top:8px !important;
+}
+
+/* Títulos largos: reducir un poco antes de permitir salto */
+@media(max-width:1100px){
+  .title-card h1{
+    font-size:34px !important;
+  }
+}
+
+@media(max-width:760px){
+  .title-card{
+    grid-template-columns:auto auto !important;
+    justify-content:center !important;
+  }
+
+  .spain-flag-mark{
+    grid-column:1 !important;
+    width:42px !important;
+    max-height:30px !important;
+  }
+
+  .title-card h1{
+    grid-column:2 !important;
+    font-size:30px !important;
+  }
+
+  .title-card #sub,
+  .title-card .top-alerts{
+    grid-column:1 / -1 !important;
+  }
+}
+
+@media(max-width:460px){
+  .spain-flag-mark{
+    width:36px !important;
+    max-height:26px !important;
+  }
+
+  .title-card h1{
+    font-size:26px !important;
+  }
+}
+
+
+/* Titulos destacados de grupos de alertas */
+.top-alerts .alerts-popover .alert-group-title{
+  background:#243650 !important;
+  color:#add5ff !important;
+  border-left:4px solid #58a6ff;
+  border-radius:7px;
+  padding:9px 12px !important;
+  margin-bottom:8px;
+  font-size:13px !important;
+  font-weight:900 !important;
+}
+
+
+/* Cabeceras de alertas en dorado oscuro */
+.top-alerts .alerts-popover .alert-group-title {
+  background:#302719 !important;
+  color:#f5cb76 !important;
+  border-left:4px solid #d29922 !important;
+}
+
+/* Documentación y novedades explícitas, sin esconderlas tras el número de versión. */
+.sep-brand-help{display:flex;gap:6px;align-items:center;margin-top:3px}
+.sep-brand-help a{color:#c7defb;text-decoration:none;border:1px solid #38516a;background:#13243a;padding:2px 6px;border-radius:6px;font-size:10px;line-height:1.5}
+.sep-brand-help a:hover,.sep-brand-help a:focus-visible{color:white;border-color:#82b8f7}
+/* Miura Panel: marca discreta, independiente del nombre del servidor */
+.sep-brandline{display:flex;justify-content:flex-end;align-items:center;gap:8px;
+  flex-wrap:wrap;margin:0 2px 5px;min-height:19px;font-size:10px;
+  color:#a9b2c3;letter-spacing:.02em}
+.sep-brand{font-weight:800;color:#d7b776;text-transform:uppercase;letter-spacing:.08em;font-size:12px;line-height:1.05}.sep-brand-stack{display:flex;flex-direction:column;align-items:flex-start;gap:2px}.sep-brand-logo{display:block;width:42px;height:42px;object-fit:contain;flex:0 0 auto}
+.sep-ver{padding:1px 6px;border-radius:6px;border:1px solid rgba(214,172,92,.25);
+  color:#a8b3c5;background:rgba(214,172,92,.06);font-size:10px}
+.sep-newver{color:#83d59b;font-weight:800}
+.sep-update-copy{border:1px solid rgba(88,166,255,.38);border-radius:7px;
+  background:rgba(88,166,255,.1);color:#9dccff;cursor:pointer;font:inherit;
+  padding:3px 7px}
+.sep-newver[hidden],.sep-update-copy[hidden]{display:none!important}
+@media(max-width:760px){.sep-brandline{justify-content:center;margin-bottom:8px}}
+.sep-primary{font-size:13px;color:#ffe4a1;border:2px solid #d3a449;background:#3b2c15;padding:7px 12px;border-radius:9px;font-weight:950;box-shadow:0 0 17px rgba(211,164,73,.22);white-space:nowrap}
+.sep-primary[hidden]{display:none!important}
+
+.sep-serverdialog #sepManageList{max-height:45vh;overflow:auto;min-width:min(640px,75vw)}
+.sep-manage-row{display:flex;justify-content:space-between;gap:10px;align-items:center;padding:10px 4px;border-bottom:1px solid #314058}
+.sep-manage-row small{display:block;color:#9ab0c7}
+.sep-manage-row button{flex:0 0 auto}
+.sep-adminbutton{color:#b9e9cb;border:1px solid #4f9d70;background:#143020;text-decoration:none}
+.sep-readonly-banner{padding:9px 12px;border:1px solid #af8552;background:#342716;color:#ffe0a2;border-radius:9px;margin:10px 0}
+.sep-readonly-banner[hidden],.sep-adminbutton[hidden]{display:none!important}
+/* Menú de cuenta: disponible solamente en HTTPS autenticado. */
+.sep-accountbar{position:relative}
+.sep-account-menu{position:absolute;z-index:200;top:calc(100% + 6px);left:0;
+  min-width:180px;padding:5px;background:#182233;border:1px solid #38506a;
+  border-radius:9px;box-shadow:0 12px 25px #0009;display:flex;flex-direction:column;gap:2px}
+.sep-account-menu[hidden]{display:none!important}
+.sep-account-menu a,.sep-account-menu button{appearance:none;display:block;width:100%;
+  border:0;border-radius:6px;text-align:left;box-sizing:border-box;
+  color:#d8e6f5;background:transparent;text-decoration:none;font:inherit;
+  font-weight:650;font-size:12px;padding:9px 10px;cursor:pointer}
+.sep-account-menu a:hover,.sep-account-menu button:hover,
+.sep-account-menu a:focus-visible,.sep-account-menu button:focus-visible{background:#284463;outline:none}
+.sep-account-menu button{color:#ffd6d6}
+
+/* v1.0.27: cabecera compacta de dos filas con logo a la altura de ambas. */
+.sep-brand-center{gap:10px!important;align-items:center!important}
+.sep-brand-logo{width:49px!important;height:49px!important;object-fit:contain;flex:0 0 49px!important}
+.sep-brand-stack{display:flex!important;flex-direction:column!important;align-items:flex-start!important;justify-content:center!important;gap:5px!important}
+.miura-brand-title{display:flex;align-items:baseline;gap:9px;white-space:nowrap;line-height:1.2}
+.miura-brand-title .sep-brand{font-size:13px!important;line-height:1.25;color:#f3ca75}
+.miura-brand-title .sep-ver{border:0!important;padding:0!important;background:transparent!important;font-size:10px!important;color:#d9b873}
+.sep-brand-help{display:flex!important;align-items:center!important;gap:7px!important;margin:0!important}
+.sep-brand-help a{display:inline-flex;align-items:center;justify-content:center;color:#f3ca75!important;border:1px solid #8d6e31!important;background:#261e12!important;border-radius:6px;padding:3px 8px!important;font-size:10px!important;font-weight:750;line-height:1.25;text-decoration:none}
+.sep-brand-help a:hover,.sep-brand-help a:focus-visible{background:#3c2b12!important;border-color:#e4b558!important;color:#ffe3a5!important}
+@media(max-width:460px){.sep-brand-logo{width:43px!important;height:43px!important;flex-basis:43px!important}.miura-brand-title .sep-brand{font-size:11px!important}.sep-brand-help a{font-size:9px!important;padding:3px 7px!important}}
+</style>
+</head>
+<body><main class="wrap">
+<div class="sep-brandline" aria-label="Nombre y versión del panel">
+  <!-- El historial de versiones se abre desde el propio número de versión. -->
+  <div class="sep-brand-center">
+    <img class="sep-brand-logo" src="/assets/sep-logo.png" alt="Miura Panel" width="42" height="42">
+    <div class="sep-brand-stack">
+      <div class="miura-brand-title"><span class="sep-brand">Miura Panel</span><span class="sep-ver">v1.0.34</span></div>
+      <div class="sep-brand-help"><a href="https://sep.mundopeke.es/ayuda.html" target="_blank" rel="noopener noreferrer" title="Manual completo de Miura Panel">? Ayuda</a><a href="https://sep.mundopeke.es/novedades.html" target="_blank" rel="noopener noreferrer" title="Historial de cambios">↻ Novedades</a></div>
+    </div>
+  </div>
+  <div class="sep-accountbar" id="sepAccountBar">
+    <a id="sepAdminLink" class="sep-serverbutton sep-adminbutton" title="Abrir Configuración" aria-haspopup="true" aria-expanded="false" hidden>👤 Invitado</a>
+    <div id="sepAccountMenu" class="sep-account-menu" role="menu" aria-label="Opciones de cuenta" hidden>
+      <a href="/configuracion" role="menuitem" id="sepAccountSettings">⚙ Configuración</a>
+      <button type="button" role="menuitem" id="sepAccountLogout">↪ Cerrar sesión</button>
+    </div>
+  </div>
+  <div class="sep-update-actions"><button id="sepCopyUpdate" class="sep-update-copy" type="button" hidden></button><button id="sepCheckUpdateNow" class="sep-update-checknow" type="button" title="Comprobar ahora si existe una nueva versión" aria-label="Comprobar actualización ahora" hidden>↻</button></div>
+  <div id="sepUpdateProgress" class="sep-update-progress" role="status" aria-live="polite" hidden>
+    <div class="sep-update-progress-head"><span id="sepUpdateProgressLabel">Actualizando Miura Panel…</span><span id="sepUpdateProgressState">Preparando…</span></div>
+    <div class="sep-update-progress-track" aria-hidden="true"><span id="sepUpdateProgressBar"></span></div>
+  </div>
+  <span id="sepUpdateFeedback" class="sep-update-feedback" role="status" aria-live="polite" hidden></span>
+</div>
+
+<!-- Preferencias de apariencia guardadas en el propio servidor SEP. -->
+<nav class="sep-serverbar" aria-label="Cambiar de servidor">
+  <label for="sepServerSelect">Servidores</label>
+  <a id="sepDockerFromAny" class="sep-serverbutton" href="#" hidden title="Gestionar Docker por SSH desde el principal">🐳 Docker SSH</a>
+  <select id="sepServerSelect" aria-label="Servidor seleccionado"></select>
+  <button type="button" id="sepAddServer" class="sep-serverbutton">+ Añadir</button>
+  <button type="button" id="sepRemoveServer" class="sep-serverbutton sep-serverremove" title="Editar, renombrar o eliminar servidores guardados">✎ Editar</button>
+  <span class="sep-serverhint">Lista guardada en este servidor</span>
+</nav>
+<dialog id="sepServerDialog" class="sep-serverdialog" aria-labelledby="sepServerDialogTitle">
+  <form id="sepServerForm" method="dialog" novalidate>
+    <h3 id="sepServerDialogTitle">Añadir servidor</h3>
+    <label for="sepServerName">Nombre para identificar el equipo</label>
+    <input id="sepServerName" maxlength="65" autocomplete="off" placeholder="Ej.: Servidor de casa">
+    <label for="sepServerAddress">IP y puerto</label>
+    <input id="sepServerAddress" spellcheck="false" autocomplete="off" placeholder="192.0.2.10:8766/" required>
+    <p>HTTP: <code>192.0.2.10:8766/</code> (solo lectura). Si ya configuraste HTTPS en el destino: <code>https://192.0.2.10:8767/</code>. Miura Panel no instala certificados al añadir un favorito.</p>
+    <div class="sep-serverdialog-actions">
+      <button type="button" id="sepServerCancel" class="sep-serverbutton sep-serverremove">Cancelar</button>
+      <button type="submit" class="sep-serverbutton">Guardar servidor</button>
+    </div>
+  </form>
+</dialog>
+<dialog id="sepManageDialog" class="sep-serverdialog" aria-labelledby="sepManageTitle">
+  <h3 id="sepManageTitle">Gestionar equipos guardados</h3>
+  <p>Puedes cambiar el nombre, la IP o el acceso HTTP/HTTPS de cada servidor o eliminarlo de la lista. La conexión SSH es independiente.</p>
+  <div id="sepManageList"></div>
+  <div class="sep-serverdialog-actions"><button id="sepManageClose" type="button" class="sep-serverbutton">Cerrar</button></div>
+</dialog>
+<div id="sepReadOnlyBanner" class="sep-readonly-banner" hidden>Modo HTTP de solo lectura. Para editar o actualizar, inicia sesión mediante Configuración HTTPS.</div>
+<div class="head">
+<div id="weatherIdentity" class="weather-identity"></div>
+
+<div class="head-left">
+<div class="title-card">
+<h1 id="dashboardTitle">Miura Panel</h1>
+<div id="sub" class="small">Cargando…</div>
+<details id="topAlerts" class="top-alerts"></details>
+</div>
+</div>
+
+<div id="networkIdentity" class="identity"></div>
+</div>
+<section id="summarySection" class="dashboard-section">
+<div class="section-title"><h2><span class="secicon">▦</span>Resumen</h2></div>
+<div class="card summary-card"><div id="summary"></div></div>
+</section>
+<div id="metrics" class="grid"></div>
+<section id="disksSection" class="section dashboard-section"><div class="section-title"><h2><span class="secicon">◫</span>Discos</h2></div><div id="disks" class="diskrow"></div><div id="sepUnmountedDisks" class="diskrow sep-unmounted"></div></section>
+<section id="realtimeSection" class="dashboard-section"><div class="section-title"><h2><span class="secicon">⌁</span>Tiempo real</h2></div><div class="realtime-grid">
+<div class="card"><div class="section-title"><h2>CPU / RAM · tiempo real</h2></div><div id="chartCpu"></div></div>
+<div class="card"><div class="section-title"><h2>Temperaturas · tiempo real</h2></div><div id="chartTemp"></div></div>
+<div class="card"><div class="section-title"><h2>Red · tiempo real</h2></div><div id="chartNet"></div></div>
+</section>
+
+<section id="dockerSection" class="section dashboard-section"><div class="card"><div class="container-head"><div class="section-title"><h2><span class="secicon">▣</span>Docker</h2></div><div class="docker-actions"><button id="updateAllBtn" class="btn warnbtn" type="button" style="display:none">Actualizar todos</button></div></div><div id="dockerSummary" class="small" style="margin-bottom:9px"></div><div class="docker-filters"><input id="dockerSearch" type="search" placeholder="Buscar contenedor o grupo…" aria-label="Buscar contenedores"><div class="docker-filter-pills" role="tablist" aria-label="Filtros Docker"><button type="button" class="docker-filter-pill active" data-filter="all">Todos</button><button type="button" class="docker-filter-pill" data-filter="update">Actualizar</button><button type="button" class="docker-filter-pill" data-filter="protected">Protegidos</button><button type="button" class="docker-filter-pill" data-filter="stopped">Detenidos</button></div></div><div id="dockerActionStatus" class="action-status"></div><div id="containers" class="containers"></div>
+<div class="sep-serverhint sep-docker-hint">Icono o nombre: abrir web en pestaña nueva. «Editar enlace» permite configurar URL y logotipo. Iconos opcionales de <a href="https://github.com/homarr-labs/dashboard-icons" target="_blank" rel="noopener noreferrer">Dashboard Icons</a>; sin conexión se muestran siglas.</div></div></section>
+<div class="footer"><span class="live-dot"></span>Métricas visibles cada 2 s · SMART/Docker cada 5 min · versiones Docker cada 6 h · actualización manual desde este panel · local · sin nube</div>
+</main>
+<script>
+// Los POST del modo HTTPS exigen token de sesión y protección CSRF.
+let sepCsrfPromise=null;
+async function sepCsrf(){
+  if(location.protocol!=='https:')return '';
+  if(!sepCsrfPromise){sepCsrfPromise=fetch('/api/admin/state',{cache:'no-store'}).then(async r=>{
+    if(!r.ok)throw Error('Autenticación HTTPS requerida');
+    const j=await r.json();return j.csrf||'';
+  });}
+  return sepCsrfPromise;
+}
+const $=s=>document.querySelector(s);const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const hb=n=>{if(n==null)return'N/D';let v=Number(n),u=['B','KiB','MiB','GiB','TiB'],i=0;while(v>=1024&&i<u.length-1){v/=1024;i++}return v.toFixed(1)+' '+u[i]};
+function baseDiskDevice(dev){
+  dev=String(dev||'');
+  let m=dev.match(/^(\/dev\/nvme\d+n\d+)p\d+$/);
+  if(m)return m[1];
+  m=dev.match(/^(\/dev\/mmcblk\d+)p\d+$/);
+  if(m)return m[1];
+  m=dev.match(/^(\/dev\/[a-zA-Z]+)\d+$/);
+  if(m)return m[1];
+  return dev;
+}
+
+function diskTemperature(x){
+  let dev=baseDiskDevice(x.device);
+  let s=(slowData?.smart||[]).find(v=>v.device===dev);
+  return s?.temperature??null;
+}
+
+async function copyText(text){
+  if(navigator.clipboard && window.isSecureContext){
+    await navigator.clipboard.writeText(text);
+    return;
+  }
+  let ta=document.createElement('textarea');
+  ta.value=text;
+  ta.style.position='fixed';
+  ta.style.left='-9999px';
+  document.body.appendChild(ta);
+  ta.focus();
+  ta.select();
+  const ok=document.execCommand('copy');
+  ta.remove();
+  if(!ok)throw new Error('Copia no permitida por el navegador');
+}
+
+function renderIdentity(d){
+  let i=d?.identity||{};
+  let title=i.title||d?.hostname||'Miura Panel';
+
+  let h=$('#dashboardTitle');
+  if(h)h.textContent=title;
+  document.title=title+' · Miura Panel';
+
+  let w=i.weather||{};
+  let city=i.city||w.city||'';
+  let weatherEl=$('#weatherIdentity');
+
+  if(weatherEl){
+    let temp=(w.temperature===0||w.temperature!=null)?`${w.temperature} °C`:'N/D';
+    weatherEl.innerHTML=`
+      <div class="weather-card">
+        <div class="weather-city">⌖ ${esc(city||'Ubicación no configurada')}</div>
+        <div class="weather-main">
+          <span class="weather-icon">${esc(w.icon||'🌡️')}</span>
+          <span class="weather-temp">${esc(temp)}</span>
+        </div>
+        <div class="weather-desc">${esc(w.description||'Sin datos meteorológicos')}</div>
+        <div id="weatherClock" class="weather-time">--:--</div>
+      </div>`;
+    updateWeatherClock(w.timezone||i.timezone||'UTC');
+  }
+
+  let tags=[];
+  if(i.public_ip)tags.push(`<span class="nettag public"><b>IP PÚBLICA</b><span class="netvalue">${esc(i.public_ip)}</span>${copyButton(i.public_ip)}</span>`);
+  if(i.local_ip)tags.push(`<span class="nettag lan"><b>IP LOCAL</b><span class="netvalue">${esc(i.local_ip)}</span>${copyButton(i.local_ip)}</span>`);
+  (i.vpns||[]).forEach(v=>tags.push(`<span class="nettag vpn"><b>${esc(v.type)}</b><span class="netvalue">${esc(v.ip)}</span>${copyButton(v.ip)}</span>`));
+
+  let el=$('#networkIdentity');
+  if(el)el.innerHTML=`<div class="identity-card">${tags.join('')}</div>`;
+  bindIpCopyButtons();
+}
+
+const liveHistory=[];const MAX_POINTS=300;let slowData=null,dockerVersions=null;let dockerActionBusy=false,dockerActionTimer=null;let dockerFilterState='all',dockerFilterQuery='';
+function pctState(v,kind='generic'){
+  v=Number(v);if(!Number.isFinite(v))return '';
+  if(kind==='disk')return v>=90?'bad':v>=75?'warn':'ok';
+  return v>=85?'bad':v>=70?'warn':'ok';
+}
+function tempState(v,kind='cpu'){
+  v=Number(v);if(!Number.isFinite(v))return '';
+  if(kind==='disk')return v>=60?'bad':v>=50?'warn':'ok';
+  return v>=85?'bad':v>=70?'warn':'ok';
+}
+
+function updateWeatherClock(timezone){
+  let el=$('#weatherClock');
+  if(!el)return;
+  try{
+    el.textContent='🕒 '+new Intl.DateTimeFormat('es-ES',{
+      timeZone:timezone||'Europe/Madrid',
+      hour:'2-digit',
+      minute:'2-digit',
+      second:'2-digit'
+    }).format(new Date());
+  }catch(e){
+    el.textContent='🕒 '+new Date().toLocaleTimeString('es-ES');
+  }
+}
+
+function copyButton(value){return `<button class="netcopy" type="button" data-copy-ip="${esc(value)}" title="Copiar">⧉</button>`}
+function bindIpCopyButtons(){document.querySelectorAll('[data-copy-ip]').forEach(btn=>{btn.onclick=async()=>{let old=btn.textContent;try{await copyText(btn.dataset.copyIp||'');btn.textContent='✓'}catch(e){btn.textContent='!'}setTimeout(()=>btn.textContent=old,900)}})}
+
+async function dockerAction(req){let r=await fetch('/api/docker-action',{method:'POST',headers:{'Content-Type':'application/json','X-Dashboard-Action':'1','X-SEP-CSRF':await sepCsrf()},body:JSON.stringify(req)});let j=await r.json().catch(()=>({ok:false,error:'Respuesta inválida'}));if(!r.ok||!j.ok)throw new Error(j.error||('HTTP '+r.status));return j}
+function showAction(msg,kind=''){let e=$('#dockerActionStatus');if(!e)return;e.className='action-status show '+kind;e.textContent=msg;clearTimeout(window.__dockerActionHideTimer);if(kind!=='error'){window.__dockerActionHideTimer=setTimeout(()=>{e.className='action-status';e.textContent='';},9000)}}
+function setDockerBusy(v){dockerActionBusy=v;renderDocker()}
+async function startDockerUpdate(action,container){let n=dockerVersions?.bulk_updates||0;let v=container?dockerMap()[container]:null;let text;if(action==='update_all')text=`Se actualizarán ${n} contenedores con tags flotantes/canales. Las versiones fijadas, Immich y protegidas no se tocarán. ¿Continuar?`;else if(action==='update_group')text='Se actualizarán juntos Immich Server y Machine Learning cambiando IMMICH_VERSION con copia y rollback. PostgreSQL y Redis no se tocarán. ¿Continuar?';else text=v?.action_mode==='rewrite_tag'?`Se actualizará ${container}. Se hará copia del Compose, se cambiará solo el tag dentro de la misma rama mayor y habrá rollback si falla. ¿Continuar?`:`Se actualizará ${container} manteniendo su tag y su estado activo/detenido. ¿Continuar?`;if(!confirm(text))return;try{setDockerBusy(true);showAction(action==='update_all'?'Iniciando actualizaciones seguras…':action==='update_group'?'Iniciando actualización del grupo Immich…':`Iniciando actualización de ${container}…`);let req=action==='update_group'?{action,group:container}:{action,container};let r=await dockerAction(req);watchDockerJob(r.job_id)}catch(e){setDockerBusy(false);showAction('Error: '+e.message,'error')}}
+async function watchDockerJob(jobId){clearTimeout(dockerActionTimer);try{let r=await dockerAction({action:'status',job_id:jobId}),j=r.job||{};let progress=j.total?`${j.done||0}/${j.total}`:'';let current=j.current?` · ${j.current}`:'';let last=(j.log||[]).at(-1)||'';showAction(`${j.state==='queued'?'En cola':j.state==='running'?'Actualizando':j.state==='done'?'Completado':j.state==='partial'?'Completado con errores':'Error'} ${progress}${current}${last?' · '+last:''}`,j.state==='done'?'done':(j.state==='error'||j.state==='partial')?'error':'');if(j.state==='queued'||j.state==='running'){dockerActionTimer=setTimeout(()=>watchDockerJob(jobId),2000)}else{setDockerBusy(false);await loadDockerVersions();setTimeout(loadDockerVersions,5000);setTimeout(loadDockerVersions,15000);setTimeout(loadDockerVersions,30000);setTimeout(loadSlow,1500)}}catch(e){setDockerBusy(false);showAction('Error consultando el progreso: '+e.message,'error')}}
+function metric(label,value,sub,pct){let cls=pct>=95?'bad':pct>=85?'warn':'';return `<div class="card"><div class="label">${esc(label)}</div><div class="metric">${esc(value)}</div><div class="small">${esc(sub||'')}</div>${pct==null?'':`<div class="bar"><div class="fill ${cls}" style="width:${Math.min(100,Math.max(0,pct))}%"></div></div>`}</div>`}
+function svgChart(el,series,maxY,unit){if(!series.length||!series[0].vals.length){el.innerHTML='<div class="small">Esperando datos…</div>';return}const W=700,H=155,P=12;let all=[];series.forEach(s=>all.push(...s.vals.filter(v=>v!=null&&Number.isFinite(v))));if(!all.length){el.innerHTML='<div class="small">Sin datos</div>';return}let max=maxY||Math.max(...all)*1.15||1,min=0;const n=series[0].vals.length;let lines=series.map((s,idx)=>{let pts=s.vals.map((v,i)=>{if(v==null||!Number.isFinite(v))return null;let x=P+(W-2*P)*(n<=1?0:i/(n-1));let y=H-P-(H-2*P)*(Math.max(min,Math.min(max,v))-min)/(max-min||1);return `${x.toFixed(1)},${y.toFixed(1)}`}).filter(Boolean).join(' ');return `<polyline points="${pts}" fill="none" stroke="${idx===0?'#58a6ff':'#d29922'}" stroke-width="2" vector-effect="non-scaling-stroke"/>`}).join('');let grid='';for(let i=0;i<=4;i++){let y=P+(H-2*P)*i/4;grid+=`<line x1="${P}" y1="${y}" x2="${W-P}" y2="${y}" stroke="#2a2f3a" stroke-width="1"/><text x="${P+3}" y="${y-3}" fill="#7d8590" font-size="10">${((max*(4-i)/4)).toFixed(max<10?1:0)}${unit||''}</text>`}el.innerHTML=`<svg class="chart" viewBox="0 0 ${W} ${H}" preserveAspectRatio="none">${grid}${lines}</svg><div class="legend">${series.map((s,i)=>`<span>${i===0?'●':'◆'} ${esc(s.name)}: ${s.vals.at(-1)==null?'N/D':s.vals.at(-1)}${unit||''}</span>`).join('')}</div>`}
+function friendlyWarning(s){return String(s)}
+
+// Cerrar alertas al pulsar fuera o presionar Escape
+document.addEventListener('pointerdown', (event) => {
+  const el = document.getElementById('topAlerts');
+  if (el && el.open && !el.contains(event.target)) {
+    el.open = false;
+  }
+});
+document.addEventListener('keydown', (event) => {
+  if (event.key === 'Escape') {
+    const el = document.getElementById('topAlerts');
+    if (el) el.open = false;
+  }
+});
+
+function renderTopAlerts(){
+  if(!slowData)return;
+  const sysAlerts=(slowData.warnings||[]).map(friendlyWarning);
+  const aptDetails=Array.isArray(slowData.update_details)?slowData.update_details:[];
+  const aptCount=Number(slowData.updates||0);
+  const dockerRows=(dockerVersions?.containers||[]).filter(x=>x.update===true || x.check==='error');
+  const dockerGroups=(dockerVersions?.groups||[]).filter(x=>x.update===true || x.check==='error');
+  const dockerCount=Number(dockerVersions?.updates||0);
+  const manualCount=Number(dockerVersions?.manual_updates||0);
+  const total=sysAlerts.length+aptCount+dockerCount+manualCount;
+  let el=$('#topAlerts');
+  if(total===0){el.className='top-alerts';el.innerHTML='';el.removeAttribute('open');return;}
+
+  let wasOpen=el.open;
+  let blocks=[];
+  if(sysAlerts.length){
+    blocks.push(`<div class="alert-group"><div class="alert-group-title">Sistema · ${sysAlerts.length}</div>
+      ${sysAlerts.map(x=>`<div class="alert-item">${esc(x)}</div>`).join('')}</div>`);
+  }
+  if(aptCount>0){
+    blocks.push(`<div class="alert-group"><div class="alert-group-title">Actualizaciones APT · ${aptCount}</div>
+    ${aptDetails.length?aptDetails.map(x=>`<div class="alert-item"><b>${esc(x.package||'Paquete')}</b>
+    <span class="alert-version">${esc(x.current_version||'N/D')} → ${esc(x.new_version||'N/D')}</span></div>`).join(''):
+    `<div class="alert-item">${aptCount} paquetes disponibles; detalle no disponible</div>`}</div>`);
+  }
+  if(dockerCount>0 || manualCount>0){
+    const names=[...dockerGroups.map(x=>({name:x.name,reason:x.reason})),...dockerRows.map(x=>({name:x.name,reason:x.reason}))];
+    blocks.push(`<div class="alert-group"><div class="alert-group-title">Docker · ${dockerCount} actualizables / ${manualCount} manuales</div>
+    ${names.map(x=>`<div class="alert-item"><b>${esc(x.name||'Contenedor')}</b>
+       ${x.reason?`<span class="alert-version">${esc(x.reason)}</span>`:''}</div>`).join('')||'<div class="alert-item">Consulta la sección Docker</div>'}</div>`);
+  }
+  el.className='top-alerts show';
+  el.innerHTML=`<summary class="alerts-summary">⚠ Alertas <b class="alerts-count">${total}</b></summary>
+    <div class="alerts-popover">${blocks.join('')}</div>`;
+
+  // Mostrar categorías sin modificar el HTML del desplegable.
+  const categories=[];
+  const warnings=(slowData.warnings||[]).map(String);
+
+  const diskNum=warnings.filter(w=>
+    w.startsWith('Disco ')||w.startsWith('SMART ')
+  ).length;
+
+  const dockerFaults=warnings.filter(w=>
+    w.includes('contenedor(es) unhealthy')
+  ).length;
+
+  const systemNum=warnings.length-diskNum-dockerFaults;
+  const aptNum=Number(slowData.updates||0);
+  const dockerUpdates=Number(dockerVersions?.updates||0);
+  const dockerManual=Number(dockerVersions?.manual_updates||0);
+
+  if(aptNum)categories.push(`Updates del sistema: ${aptNum}`);
+  if(dockerUpdates)categories.push(`Updates Docker: ${dockerUpdates}`);
+  if(dockerManual)categories.push(`Docker manual: ${dockerManual}`);
+  if(diskNum)categories.push(`Discos: ${diskNum}`);
+  if(systemNum)categories.push(`Sistema: ${systemNum}`);
+  if(dockerFaults)categories.push(`Docker: ${dockerFaults}`);
+
+  const summary=el.querySelector('summary');
+  if(summary && categories.length){
+    summary.textContent=`⚠ ${categories.join(' · ')}`;
+  }
+
+  if(wasOpen)el.open=true;
+}
+function dockerMap(){let m={};(dockerVersions?.containers||[]).forEach(x=>m[x.name]=x);return m}
+// SEP: catálogo local de interfaces conocidas. Nunca abrir bases de datos,
+// puertos aleatorios ni puertos UDP. Direcciones personalizadas por navegador.
+const sepWebCatalog=[
+ [/^(espocrm)(?![-_])/,80,'EspoCRM','E','#ea5834'],
+ [/^portainer(?:$|[-_])/,9000,'Portainer','P','#12a8d0'],
+ [/^ddns[-_]?updater/,8000,'DDNS Updater','D','#477ee8'],
+ [/^wg[-_]?easy/,51821,'WG-Easy','W','#f5b942'],
+ [/^nginx[_-]?proxy[_-]?manager/,81,'Nginx Proxy Manager','N','#30b98f'],
+ [/^zigbee2mqtt/,8080,'Zigbee2MQTT','Z','#ca725c'],
+ [/^n8n(?:$|[-_])/,5678,'n8n','n','#ff6d5a'],
+ [/^navidrome/,4533,'Navidrome','N','#e65885'],
+ [/^pihole/,80,'Pi-hole','π','#da3434','/admin/'],
+ [/^nextcloud(?:$|[-_])/,80,'Nextcloud','N','#0082c9'],
+ [/^immich[_-]?server/,2283,'Immich','I','#f35e91'],
+ [/^metube/,8081,'MeTube','M','#e65555'],
+ [/^vaultwarden/,80,'Vaultwarden','V','#5865a4'],
+ [/^musicbrainz[-_]?picard/,5800,'MusicBrainz Picard','M','#aa6595'],
+ [/^homepage/,3000,'Homepage','H','#5788bc'],
+ [/^uptime[-_]?kuma/,3001,'Uptime Kuma','U','#5bcb7d'],
+ [/^adguard/,3000,'AdGuard','A','#57ae5d'],
+ [/^jellyfin/,8096,'Jellyfin','J','#995ad0'],
+ [/^grafana/,3000,'Grafana','G','#e98041'],
+ [/^prometheus/,9090,'Prometheus','P','#ea6427'],
+ [/^gitea/,3000,'Gitea','G','#7cb655'],
+ [/^code[-_]?server/,8443,'Code Server','C','#3186dc'],
+ [/^paperless/,8000,'Paperless','P','#69ab79'],
+ [/^homeassistant/,8123,'Home Assistant','H','#4caae7']
+];
+// Catálogo independiente de Homepage: Homarr Labs Dashboard Icons (Apache-2.0).
+// Solo se consultan imágenes públicas estáticas; sin credenciales ni conexiones Docker adicionales.
+// Si no existe un logo o el navegador no tiene Internet, conservamos favicon o siglas locales.
+const sepIconBase='https://raw.githubusercontent.com/homarr-labs/dashboard-icons/main/svg/';
+const sepIconAliases=[
+  [/^zigbee2mqtt/, 'zigbee2mqtt'],[/^n8n(?:$|[-_])/, 'n8n'],[/^nginx[-_]?proxy[-_]?manager/, 'nginx-proxy-manager'],
+  [/^nextcloud[-_]db/, 'mariadb'],[/^nextcloud[-_]redis/, 'redis'],[/^nextcloud/, 'nextcloud'],
+  [/^immich[-_]postgres/, 'postgresql'],[/^immich[-_]redis/, 'redis'],
+  [/^immich[-_](?:server|machine[-_]?learning)/, 'immich'],[/^immich$/, 'immich'],
+  [/^espocrm[-_]db/, 'mariadb'],[/^espocrm[-_]/, 'espocrm'],[/^espocrm$/, 'espocrm'],
+  [/^go2rtc/, 'go2rtc'],[/^wg[-_]easy/, 'wireguard'],[/^ddns[-_]updater/, 'ddns-updater'],
+  [/^vaultwarden/, 'vaultwarden'],[/^homeassistant/, 'home-assistant'],[/^pihole/, 'pi-hole'],
+  [/^metube/, 'metube'],[/^musicbrainz[-_]picard/, 'musicbrainz'],
+  [/^navidrome/, 'navidrome'],[/^sftpgo/, 'sftpgo'],[/^mosquitto/, 'mosquitto'],
+  [/^termix/, 'termix'],[/^portainer/, 'portainer'],[/^homepage/, 'homepage'],
+  [/^ntp[-_]server/, 'ntp'],[/^camaras[-_]web/, 'camera-ui'],
+  [/^diun/, 'docker'],
+  [/^jellyfin/, 'jellyfin'],[/^uptime[-_]kuma/, 'uptime-kuma'],
+  [/^grafana/, 'grafana'],[/^gitea/, 'gitea'],[/^paperless/, 'paperless-ngx'],
+  [/^redis/, 'redis'],[/^postgres/, 'postgresql'],[/^mariadb/, 'mariadb'],
+  [/^mysql/, 'mysql'],[/^mongo/, 'mongodb'],[/^adguard/, 'adguard-home'],
+  [/^traefik/, 'traefik'],[/^jdownloader/, 'jdownloader'],[/^syncthing/, 'syncthing'],
+  [/^plex/, 'plex'],[/^jellyseerr/, 'jellyseerr'],[/^prowlarr/, 'prowlarr'],
+  [/^sonarr/, 'sonarr'],[/^radarr/, 'radarr'],[/^bazarr/, 'bazarr'],
+  [/^frigate/, 'frigate'],[/^node[-_]red/, 'node-red'],[/^ollama/, 'ollama'],
+  [/^open[-_]?webui/, 'open-webui'],[/^docker/, 'docker'],
+];
+function sepIconSlug(value){return String(value||'').toLowerCase().replace(/[^a-z0-9]+/g,'-').replace(/^-|-$/g,'').slice(0,90)}
+function sepCatalogSlug(row){
+  const name=String(row.name||'').toLowerCase();
+  const alias=sepIconAliases.find(x=>x[0].test(name));
+  if(alias)return alias[1];
+  // Imagen usada por el contenedor, aunque tenga otro nombre local.
+  const image=String(row.image||'').split('/').pop().split('@')[0].split(':')[0];
+  let slug=sepIconSlug(image||name);
+  slug=slug.replace(/-(server|web|backend|frontend|app|daemon|latest|stable)$/, '');
+  if(!slug || /^(library|alpine|ubuntu|debian|latest|scratch|nginx|python)$/.test(slug)){
+    slug=sepIconSlug(name).replace(/-(server|web|backend|frontend|app|daemon)$/, '');
+  }
+  return slug;
+}
+const sepLinksKey='sep-custom-links-v1';
+function sepGetLinks(){try{const v=JSON.parse(localStorage.getItem(sepLinksKey)||'{}');return v&&typeof v==='object'&&!Array.isArray(v)?v:{}}catch{return {}}}
+function sepSafeWebURL(raw){
+  try{const u=new URL(String(raw));return ['http:','https:'].includes(u.protocol)&&!u.username&&!u.password?u.href:null}catch{return null}
+}
+function sepSetLink(name){
+  let links=sepGetLinks(),stored=links[name];
+  let previous=typeof stored==='string'?{url:stored,icon:''}:(stored||{});
+  const value=prompt('URL web para '+name+' (http:// o https://). Vacío = sin URL personalizada:',previous.url||'');
+  if(value===null)return;
+  const v=value.trim(),url=v?sepSafeWebURL(v):null;
+  if(v&&!url){alert('URL no válida. Usa http:// o https:// sin usuario ni contraseña.');return;}
+  const icon=prompt('Logo opcional: nombre del catálogo (ej. nextcloud) o URL https://...; vacío = automático:',previous.icon||'');
+  if(icon===null)return;
+  const enteredIcon=icon.trim();
+  const customIcon=!enteredIcon?'':(sepSafeWebURL(enteredIcon)||(/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(enteredIcon)?enteredIcon:null));
+  if(enteredIcon&&!customIcon){alert('Usa un nombre del catálogo (ej. nextcloud) o una URL http(s) válida.');return;}
+  if(url||customIcon)links[name]={url:url||'',icon:customIcon||''};
+  else delete links[name];
+  try{localStorage.setItem(sepLinksKey,JSON.stringify(links))}catch{alert('No se pudo guardar el enlace en este navegador.');return;}
+  renderDocker();
+}
+function sepAppDescriptor(row){
+  let name=String(row.name||'');
+  let item=sepWebCatalog.find(c=>c[0].test(name.toLowerCase()));
+  let label=item?item[2]:name,letter=item?item[3]:name.slice(0,2).toUpperCase();
+  let color=item?item[4]:'#46628c',ports=Array.isArray(row.ports)?row.ports:[];
+  let custom=sepGetLinks()[name],url=null,customIcon=null;
+  if(custom&&typeof custom==='object'){
+    url=sepSafeWebURL(custom.url);
+    const rawIcon=String(custom.icon||'');
+    customIcon=sepSafeWebURL(rawIcon)||(/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(rawIcon)?rawIcon:null);
+  }else if(typeof custom==='string')url=sepSafeWebURL(custom);
+  if(!url&&item){
+    let options=ports.filter(x=>Number(x.container_port)===item[1]);
+    // Portainer HTTPS 9443 si no hay 9000; URL sin puerto no se presupone.
+    if(!options.length && /^portainer/.test(name.toLowerCase())) options=ports.filter(x=>Number(x.container_port)===9443);
+    // Evitar elegir una IP de otro segmento cuando hay varios bindings.
+    let current=location.hostname, matches=options.filter(x=>x.ip===current);
+    if(matches.length)options=matches;
+    else if(options.some(x=>x.ip==='0.0.0.0'))options=options.filter(x=>x.ip==='0.0.0.0');
+    else if(new Set(options.map(x=>x.ip)).size>1)options=[];
+    if(options.length){
+      const x=options[0];let ip=x.ip==='0.0.0.0'?current:x.ip;
+      const https=[443,9443].includes(Number(x.container_port));
+      url=(https?'https':'http')+'://'+ip+':'+x.host_port+(item[5]||'/');
+    }
+  }
+  // Prioridad: icono personalizado, catálogo, favicon y finalmente siglas locales.
+  const catalog=sepCatalogSlug(row);
+  let icon=customIcon&&customIcon.includes('://')?customIcon:'';
+  let catalogIcon=!customIcon?sepIconBase+encodeURIComponent(catalog)+'.svg':
+    (customIcon&&!customIcon.includes('://')?sepIconBase+encodeURIComponent(customIcon)+'.svg':'');
+  let favicon='';
+  if(url){try{const u=new URL(url);favicon=u.origin+'/favicon.ico'}catch{}}
+  return {url,label,letter,color,icon,catalogIcon,favicon,custom:!!custom};
+}
+function sepAppLabel(row){
+  const app=sepAppDescriptor(row),letter=esc(app.letter),name=esc(row.name),label=esc(app.label);
+  const icon=(app.favicon?`<img class="sep-appfavicon" loading="lazy" referrerpolicy="no-referrer" src="${esc(app.favicon)}" alt="" onerror="this.remove()">`:'')+
+    (app.catalogIcon?`<img class="sep-appfavicon sep-appcatalog" loading="lazy" referrerpolicy="no-referrer" src="${esc(app.catalogIcon)}" alt="" onerror="this.remove()">`:'')+
+    (app.icon?`<img class="sep-appfavicon sep-appcustom" loading="lazy" referrerpolicy="no-referrer" src="${esc(app.icon)}" alt="" onerror="this.remove()">`:'');
+  const avatar=`<span class="sep-appicon" style="--sep-icon-bg:${app.color}"><span class="sep-appfallback">${letter}</span>${icon}</span>`;
+  const heading=app.url?`<a class="sep-applink" href="${esc(app.url)}" target="_blank" rel="noopener noreferrer" title="Abrir ${label} en nueva pestaña">${avatar}<span>${name} ↗</span></a>`
+    :`<span class="sep-appname">${avatar}<span>${name}</span></span>`;
+  return `${heading}<button class="sep-appconfigure" type="button" data-app="${name}" title="Editar enlace y logotipo de ${name}" aria-label="Editar enlace y logotipo de ${name}">🔗 <span>Editar enlace</span></button>`;
+}
+function sepCardAttrs(x){const u=sepAppDescriptor(x).url;
+  return u?` data-href="${esc(u)}" tabindex="0" role="link" title="Abrir interfaz web en otra pestaña"`:'';
+}
+function sepBindAppConfig(){
+  document.querySelectorAll('.container[data-href]').forEach(card=>{
+    const open=()=>window.open(card.dataset.href,'_blank','noopener,noreferrer');
+    card.addEventListener('click',e=>{if(!e.target.closest('a,button,input,select'))open()});
+    card.addEventListener('keydown',e=>{if(e.target===card && (e.key==='Enter'||e.key===' ')){e.preventDefault();open()}});
+  });
+  document.querySelectorAll('.sep-appconfigure').forEach(b=>b.addEventListener('click',()=>sepSetLink(b.dataset.app)));
+}
+
+function dockerTileMeta(tile){const text=(tile.search||'').toLowerCase();const q=dockerFilterQuery.trim().toLowerCase();const qok=!q||text.includes(q);let fok=true;switch(dockerFilterState){case 'update': fok=tile.update===true; break; case 'protected': fok=tile.protected===true; break; case 'stopped': fok=tile.stopped===true; break; default: fok=true;}return qok&&fok;}
+function bindDockerFilters(){const search=$('#dockerSearch');if(search&&!search.dataset.bound){search.dataset.bound='1';search.addEventListener('input',()=>{dockerFilterQuery=search.value||'';renderDocker();});}document.querySelectorAll('.docker-filter-pill').forEach(btn=>{if(btn.dataset.bound)return;btn.dataset.bound='1';btn.addEventListener('click',()=>{dockerFilterState=btn.dataset.filter||'all';document.querySelectorAll('.docker-filter-pill').forEach(b=>b.classList.toggle('active',b===btn));renderDocker();});});}
+function renderDocker(){
+  if(!slowData)return;
+  let docker=slowData.docker||{}, rows=[...(docker.containers||[])].sort((a,b)=>String(a.name).localeCompare(String(b.name),'es',{numeric:true,sensitivity:'base'})), allBtn=$('#updateAllBtn');
+
+  if(docker.available!==true){
+    $('#dockerSummary').textContent='Docker no instalado o daemon no disponible';
+    $('#containers').innerHTML='';
+    if(allBtn)allBtn.style.display='none';
+    return;
+  }
+
+  if(docker.updater_enabled!==true){
+    $('#dockerSummary').textContent=`${rows.length} contenedores detectados · Actualizador desactivado`;
+    if(allBtn)allBtn.style.display='none';
+    $('#containers').innerHTML=rows.map(x=>`<div class="container" ${sepCardAttrs(x)}><div class="container-head"><div class="sep-appheader">${sepAppLabel(x)}</div><span class="pill muted">LECTURA</span></div><span class="small">${esc(x.status)}</span></div>`).join('');
+    sepBindAppConfig();
+    return;
+  }
+
+  let vm=dockerMap(),groups=dockerVersions?.groups||[];
+  let checked=dockerVersions?`${dockerVersions.count} comprobados · ${dockerVersions.updates} actualizables${dockerVersions.manual_updates?` · ${dockerVersions.manual_updates} manuales`:''}${dockerVersions.protected?` · ${dockerVersions.protected} protegidos`:''}${dockerVersions.errors?` · ${dockerVersions.errors} sin comprobar`:''}`:'Comprobación de versiones pendiente…';
+  $('#dockerSummary').textContent=`${rows.length} contenedores detectados · ${checked}`;
+
+  if(allBtn){
+    let n=dockerVersions?.bulk_updates||0;
+    allBtn.style.display=n>0?'inline-block':'none';
+    allBtn.textContent=`Actualizar seguros (${n})`;
+    allBtn.disabled=dockerActionBusy;
+  }
+
+  let groupTiles=groups.map(g=>{
+    let status=g.check==='error'?'<span class="pill muted">SIN DATOS</span>':g.check==='manual'?'<span class="pill manual">MANUAL</span>':g.update&&g.actionable?`<button class="pill warntext update-group" type="button" data-group="${esc(g.id)}" ${dockerActionBusy?'disabled':''}>ACTUALIZAR GRUPO</button>`:'<span class="pill oktxt">AL DÍA</span>';
+    return {name:String(g.name||'Immich'),update:g.update===true,protected:true,stopped:false,search:`${String(g.name||'Immich')} ${String(g.installed||'')} ${String(g.latest||'')}` ,html:`<div class="container docker-group ${g.update?'update':''}"><div class="container-head"><b>${esc(g.name)}</b>${status}</div><span class="small">Server + Machine Learning · PostgreSQL y Redis protegidos</span><div class="versions"><span>Actual: <strong>${esc(g.installed||'N/D')}</strong></span><span>Última: <strong>${esc(g.latest||'N/D')}</strong></span></div></div>`};
+  });
+
+  let containerTiles=rows.map(x=>{
+    let v=vm[x.name],update=v?.update===true,actionable=v?.actionable===true,pending=!v,status;
+    if(pending)status='<span class="pill muted">PENDIENTE</span>';
+    else if(v?.check==='grouped')status='<span class="pill grouped">GRUPO IMMICH</span>';
+    else if(v?.check==='error')status='<span class="pill muted">SIN DATOS</span>';
+    else if(v?.check==='protected')status='<span class="pill protected">PROTEGIDO</span>';
+    else if(v?.check==='manual'||(update&&!actionable))status='<span class="pill manual">MANUAL</span>';
+    else if(update&&actionable)status=`<button class="pill warntext update-one" type="button" data-container="${esc(x.name)}" ${dockerActionBusy?'disabled':''}>ACTUALIZAR</button>`;
+    else status='<span class="pill oktxt">AL DÍA</span>';
+    let installed=v?.installed||'N/D',latest=v?.latest||'N/D',reason=v?.reason?`<span title="${esc(v.reason)}"> · ${esc(v.reason)}</span>`:'';
+    const stopped=String(x.status||'').toLowerCase().includes('exited')||String(x.status||'').toLowerCase().includes('stopped')||String(x.status||'').toLowerCase().includes('created');
+    return {name:String(x.name),update,protected:v?.check==='protected'||v?.check==='grouped',stopped,search:`${String(x.name)} ${String(x.status||'')} ${String(installed)} ${String(latest)} ${String(v?.reason||'')}`,html:`<div class="container ${update?'update':''}" ${sepCardAttrs(x)}><div class="container-head"><div class="sep-appheader">${sepAppLabel(x)}</div>${status}</div><span class="small">${esc(x.status)}${reason}</span><div class="versions"><span>Actual: <strong>${esc(installed)}</strong></span><span>Última: <strong>${esc(latest)}</strong></span></div></div>`};
+  });
+
+  bindDockerFilters();
+  const visible=[...groupTiles,...containerTiles].filter(dockerTileMeta).sort((a,b)=>a.name.localeCompare(b.name,'es',{numeric:true,sensitivity:'base'}));
+  $('#containers').innerHTML=visible.map(x=>x.html).join('') || '<div class="small" style="padding:12px 0">No hay contenedores que coincidan con el filtro actual.</div>';
+  sepBindAppConfig();
+  document.querySelectorAll('.update-one').forEach(b=>b.addEventListener('click',()=>startDockerUpdate('update_one',b.dataset.container)));
+  document.querySelectorAll('.update-group').forEach(b=>b.addEventListener('click',()=>startDockerUpdate('update_group',b.dataset.group)));
+}
+function renderSlow(d){
+slowData=d;
+renderIdentity(d);
+sepRenderServers();
+
+let dockerAvailable=d.docker?.available===true;
+let dockerUpdater=d.docker?.updater_enabled===true;
+let dockerState=dockerAvailable?`${d.docker.running} activos · ${d.docker.stopped} detenidos`:'No disponible';
+let services=d.failed_services.length;
+let debianUpdates=d.updates??'N/D';
+let dockerUpdates=!dockerAvailable?'—':(!dockerUpdater?'Desactivado':(dockerVersions?.updates??'…'));
+
+$('#summary').innerHTML=`
+<div class="summary-grid">
+  <div class="summary-item sum-docker">
+    <div class="summary-label">▣ Docker</div>
+    <div class="summary-value">${esc(dockerState)}</div>
+  </div>
+
+  <div class="summary-item sum-services">
+    <div class="summary-label">✓ Servicios</div>
+    <div class="summary-value ${services===0?'status-value ok':'status-value bad'}">
+      ${services===0?'Todo correcto':services+' fallidos'}
+    </div>
+  </div>
+
+  <div class="summary-item sum-debian">
+    <div class="summary-label">↻ Actualizaciones APT</div>
+    <div class="summary-value ${Number(debianUpdates)>0?'status-value warn':'status-value ok'}">
+      ${debianUpdates} pendientes
+    </div>
+  </div>
+
+  <div class="summary-item sum-dockerup">
+    <div class="summary-label">↻ Actualizaciones Docker</div>
+    <div class="summary-value ${dockerUpdater&&Number(dockerUpdates)>0?'status-value warn':(dockerAvailable?'status-value ok':'')}">
+      ${dockerUpdater?dockerUpdates+' pendientes':dockerUpdates}
+    </div>
+  </div>
+</div>`;
+
+renderDocker();
+renderTopAlerts()
+}
+
+function formatUptime(seconds){
+  const s=Number(seconds);
+  if(!Number.isFinite(s)||s<0)return 'N/D';
+  const d=Math.floor(s/86400),h=Math.floor(s%86400/3600),m=Math.floor(s%3600/60);
+  return (d?`${d} d `:'')+`${h} h ${m} min`;
+}
+let sepRemoteDiskAliases={};
+function sepDiskKey(x,unmounted=false){
+  // Montajes OMV por UUID permanecen estables aunque cambie /dev/sdX.
+  // Para particiones normales usamos el punto de montaje, no el nodo del disco.
+  return x.stable_key || (unmounted?'emmc:'+String(x.model||'')+'|'+String(x.size||'')+'|'+String(x.device||''):
+    'mount:'+String(x.mount||x.device||''));
+}
+function sepDiskName(x,unmounted=false){
+  return sepRemoteDiskAliases[sepDiskKey(x,unmounted)]||x.label||x.model||x.device;
+}
+async function sepRenameDisk(key,defaultName){
+  const previous=sepRemoteDiskAliases[key]||'';
+  const value=prompt('Nombre que quieres mostrar en Miura Panel. Déjalo vacío para restablecer el original:',previous||defaultName);
+  if(value===null)return;
+  const label=value.trim().slice(0,65);
+  if(!label||label===defaultName)delete sepRemoteDiskAliases[key];
+  else sepRemoteDiskAliases[key]=label;
+  try{await sepWritePrefs('disk_aliases',sepRemoteDiskAliases);await loadLive();}
+  catch(e){alert('No se ha guardado el nombre: '+e.message);await sepLoadPrefs();}
+}
+function renderLive(l){let cpuModel=slowData?.system?.cpu_model||'CPU';let cpuCount=slowData?.system?.cpu_count||'';$('#sub').innerHTML=`${esc(cpuModel)}${cpuCount?' · '+cpuCount+' hilos':''} · RAM ${hb(l.ram_total)}`;let cpuState=pctState(l.cpu),ramState=pctState(l.ram),cpuTempState=tempState(l.cpu_temp,'cpu');
+$('#metrics').innerHTML=
+`<div class="card"><div class="label">CPU</div><div class="metric status-value ${cpuState}">${esc(l.cpu)}%</div><div class="small">Carga ${esc(l.load1)} / ${esc(l.load5)} / ${esc(l.load15)}</div><div class="small sep-detail">Encendido: ${esc(formatUptime(l.uptime_seconds))}</div><div class="bar"><div class="fill ${cpuState}" style="width:${Math.min(100,Math.max(0,l.cpu))}%"></div></div></div>`+
+`<div class="card"><div class="label">RAM</div><div class="metric status-value ${ramState}">${esc(l.ram)}%</div><div class="small">${hb(l.ram_used)} / ${hb(l.ram_total)}</div><div class="small sep-detail">${Number(l.swap_total)>0?`Swap: ${hb(l.swap_used)} / ${hb(l.swap_total)} (${esc(l.swap_percent)}%)`:'Swap: no configurada'}</div><div class="bar"><div class="fill ${ramState}" style="width:${Math.min(100,Math.max(0,l.ram))}%"></div></div></div>`+
+`<div class="card"><div class="label">Temperatura CPU</div><div class="metric status-value ${cpuTempState}">${esc(l.cpu_temp??'N/D')} °C</div><div class="small">NVMe ${esc(l.nvme_temp??'N/D')} °C</div><div class="bar"><div class="fill ${cpuTempState}" style="width:${Math.min(100,Math.max(0,l.cpu_temp||0))}%"></div></div></div>`+
+metric('Red',`↓ ${l.rx_mbps} Mbps`,`↑ ${l.tx_mbps} Mbps · ${l.iface||'N/D'}`,null);$('#disks').innerHTML=l.disks.map(x=>{
+let dev=baseDiskDevice(x.device);
+let sm=(slowData?.smart||[]).find(v=>v.device===dev)||{};
+let temp=sm.temperature??null;
+let healthClass=sm.passed===true?'oktxt':sm.passed===false?'badtxt':'muted';
+let healthText=sm.passed===true?'OK':sm.passed===false?'FALLO':'N/D';
+let tempClass=temp==null?'':temp>=60?'bad':temp>=50?'warn':'';
+return `<div class="card disk-card">
+<div class="disk-head"><div><div class="disk-name">${esc(sepDiskName(x))}</div><div class="disk-dev">${esc(x.device)}</div><button class="sep-disk-rename" type="button" data-disk-key="${esc(sepDiskKey(x))}" data-default-name="${esc(x.label||x.device)}">✎ Renombrar</button></div><span class="pill disk-health ${healthClass}">${healthText}</span></div>
+<div style="display:flex;align-items:center;justify-content:space-between;gap:10px"><div class="metric status-value ${pctState(x.percent,'disk')}">${x.percent}%</div><div class="disk-temp ${tempClass}">△ ${temp==null?'N/D':temp+' °C'}</div></div>
+<div class="mountrow"><div class="mount" title="${esc(x.mount)}">${esc(x.mount)}</div><button class="copy-path" type="button" data-copy="${esc(x.mount)}">Copiar ruta</button></div>
+<div class="small" style="margin-top:4px">${hb(x.used)} usados · ${hb(x.free)} libres · ${hb(x.total)} total</div>
+<div class="disk-details">
+<div class="disk-detail"><span>Modelo</span><strong title="${esc((x.model || (sm.model && sm.model !== 'Desconocido' ? sm.model : 'N/D')))}">${esc((x.model || (sm.model && sm.model !== 'Desconocido' ? sm.model : 'N/D')))}</strong></div>
+<div class="disk-detail"><span>Vida</span><strong>${esc(sm.life_label|| (sm.life==null?'N/D':sm.life+'%'))}</strong></div>
+<div class="disk-detail"><span>Horas</span><strong>${sm.hours??'N/D'}</strong></div>
+</div>
+<div class="bar"><div class="fill ${pctState(x.percent,'disk')}" style="width:${x.percent}%"></div></div>
+</div>`
+ }).join('');
+// Mostrar eMMC de rescate/no montada: solo información del controlador Linux.
+const mounted=new Set((l.disks||[]).map(x=>baseDiskDevice(x.device)));
+const hidden=(slowData?.smart||[]).filter(x=>x.type==='emmc'&&!mounted.has(x.device));
+$('#sepUnmountedDisks').innerHTML=hidden.map(x=>`<div class="card disk-card sep-emmc-card">
+<div class="disk-name">${esc(sepDiskName(x,true))}</div><button class="sep-disk-rename" type="button" data-disk-key="${esc(sepDiskKey(x,true))}" data-default-name="${esc(x.model||'eMMC')}">✎ Renombrar</button><div class="disk-dev">${esc(x.device)} · Sin montar (solo lectura)</div>
+<div class="disk-detail"><span>Estado eMMC</span><strong>${x.pre_eol===1?'Normal':x.pre_eol===2?'Aviso':x.pre_eol===3?'Urgente':'N/D'}</strong></div>
+<div class="disk-detail"><span>Vida estimada</span><strong>${esc(x.life_label||'N/D')}</strong></div>
+<div class="disk-detail"><span>Capacidad</span><strong>${x.size?hb(x.size):'N/D'}</strong></div></div>`).join('');
+document.querySelectorAll('.sep-disk-rename').forEach(btn=>btn.addEventListener('click',()=>sepRenameDisk(btn.dataset.diskKey,btn.dataset.defaultName)));
+document.querySelectorAll('.copy-path').forEach(btn=>btn.addEventListener('click',async()=>{
+  let original=btn.textContent;
+  try{await copyText(btn.dataset.copy||'');btn.textContent='Copiado ✓'}catch(e){btn.textContent='Error'}
+  setTimeout(()=>btn.textContent=original,1200);
+}));
+liveHistory.push(l);if(liveHistory.length>MAX_POINTS)liveHistory.shift();svgChart($('#chartCpu'),[{name:'CPU',vals:liveHistory.map(x=>x.cpu)},{name:'RAM',vals:liveHistory.map(x=>x.ram)}],100,'%');svgChart($('#chartTemp'),[{name:'CPU',vals:liveHistory.map(x=>x.cpu_temp)},{name:'NVMe',vals:liveHistory.map(x=>x.nvme_temp)}],100,'°');let netMax=Math.max(1,...liveHistory.flatMap(x=>[x.rx_mbps||0,x.tx_mbps||0]))*1.15;svgChart($('#chartNet'),[{name:'Bajada',vals:liveHistory.map(x=>x.rx_mbps)},{name:'Subida',vals:liveHistory.map(x=>x.tx_mbps)}],netMax,'')}
+async function loadDockerVersions(){try{let r=await fetch('docker-updates.json?'+Date.now());if(r.ok)dockerVersions=await r.json()}catch(e){}renderDocker();renderTopAlerts();if(slowData)renderSlow(slowData)}
+async function loadSlow(){try{renderSlow(await fetch('data.json?'+Date.now()).then(r=>r.json()));await loadDockerVersions()}catch(e){console.error(e)}}
+async function loadLive(){try{let r=await fetch('/api/live?'+Date.now());if(!r.ok)throw new Error('HTTP '+r.status);renderLive(await r.json())}catch(e){$('#sub').textContent='Error leyendo métricas en tiempo real: '+e.message}}
+let sepUpdateNoticeTimer;
+function showSepUpdateNotice(message,sticky=false){
+  const notice=document.getElementById('sepUpdateFeedback');
+  if(!notice)return;
+  notice.textContent=message;
+  notice.hidden=false;
+  clearTimeout(sepUpdateNoticeTimer);
+  if(!sticky)sepUpdateNoticeTimer=setTimeout(()=>{notice.hidden=true;},10000);
+}
+function setSepUpdateProgress(stage,label,state){
+  const box=document.getElementById('sepUpdateProgress');
+  const l=document.getElementById('sepUpdateProgressLabel');
+  const st=document.getElementById('sepUpdateProgressState');
+  if(!box)return;
+  box.hidden=false;box.classList.remove('restarting','done','error');
+  if(stage)box.classList.add(stage);
+  if(l&&label)l.textContent=label;
+  if(st&&state)st.textContent=state;
+}
+function beginSepUpdateProgress(latest,btn){
+  window.__miuraUpdateUI={running:true,target:String(latest||''),button:btn};
+  btn.hidden=true;btn.disabled=true;
+  setSepUpdateProgress('',`Actualizando a v${latest}`,'Preparando…');
+}
+function failSepUpdateProgress(message,btn,original){
+  const ui=window.__miuraUpdateUI||{};ui.running=false;window.__miuraUpdateUI=ui;
+  setSepUpdateProgress('error','Actualización no iniciada','Error');
+  setTimeout(()=>{const box=document.getElementById('sepUpdateProgress');if(box)box.hidden=true;btn.hidden=false;btn.disabled=false;btn.textContent=original;},1800);
+  showSepUpdateNotice(message);
+}
+window.setSepUpdateProgress=setSepUpdateProgress;
+async function launchPanelUpdateFromHeader(latest,btn){
+  if(location.protocol!=='https:'){
+    showSepUpdateNotice('Para actualizar desde la web, abre este servidor por HTTPS e inicia sesión como administrador.');
+    return;
+  }
+  if(!sepAuthenticated){
+    location.assign('/login');
+    return;
+  }
+  if(!confirm('¿Actualizar Miura Panel a v'+latest+'? La web puede desconectarse unos segundos y se recargará sola al terminar.'))return;
+  const original=btn.textContent;
+  beginSepUpdateProgress(latest,btn);
+  showSepUpdateNotice('Actualización iniciándose. Puedes dejar esta pestaña abierta: se reconectará automáticamente al terminar.',true);
+  try{
+    const csrf=await sepCsrf();
+    const r=await fetch('/api/admin/update-local',{
+      method:'POST',credentials:'same-origin',cache:'no-store',
+      headers:{'Content-Type':'application/json','X-SEP-CSRF':csrf},body:'{}'
+    });
+    let data={};try{data=await r.json()}catch(_e){}
+    if(r.status===401){location.assign('/login');return}
+    if(!r.ok)throw Error(data.error||('HTTP '+r.status));
+    setSepUpdateProgress('',`Actualizando a v${latest}`,'Instalando…');
+    showSepUpdateNotice('Actualización en curso. El trabajo continúa en el servidor aunque cierres esta pestaña; si la dejas abierta, se recargará sola.',true);
+  }catch(e){
+    failSepUpdateProgress('No se pudo iniciar la actualización: '+(e.message||e),btn,original);
+  }
+}
+
+async function detectSepUpdateFailure(){
+  const ui=window.__miuraUpdateUI;
+  if(!ui?.running||!sepAuthenticated||location.protocol!=='https:')return false;
+  try{
+    const r=await fetch('/api/admin/state?_='+Date.now(),{cache:'no-store',credentials:'same-origin',signal:AbortSignal.timeout(4500)});
+    if(!r.ok)return false;
+    const data=await r.json(),local=data?.local||{};
+    const active=String(local.ActiveState||'');
+    const result=String(local.Result||'');
+    if(active==='failed'||(active==='inactive'&&result&&result!=='success')){
+      ui.running=false;
+      setSepUpdateProgress('error',`Actualización a v${ui.target}`,'Fallida ✕');
+      showSepUpdateNotice('La actualización ha fallado y se ha detenido de forma segura. Puedes volver a intentarlo cuando se corrija la causa.',true);
+      const btn=ui.button;
+      if(btn){setTimeout(()=>{document.getElementById('sepUpdateProgress').hidden=true;btn.hidden=false;btn.disabled=false;checkPanelVersion();},2500);}
+      return true;
+    }
+  }catch(_e){}
+  return false;
+}
+async function checkPanelUpdateNow(){
+  const b=document.getElementById('sepCheckUpdateNow');
+  if(!b||location.protocol!=='https:'||!sepAuthenticated)return;
+  const old=b.textContent;b.disabled=true;b.textContent='…';
+  try{
+    const before=await fetch('panel-update.json?_='+Date.now(),{cache:'no-store'}).then(r=>r.ok?r.json():{}).catch(()=>({}));
+    const csrf=await sepCsrf();
+    const r=await fetch('/api/admin/update-check',{method:'POST',credentials:'same-origin',cache:'no-store',headers:{'Content-Type':'application/json','X-SEP-CSRF':csrf},body:'{}'});
+    const j=await r.json().catch(()=>({}));if(!r.ok)throw Error(j.error||('HTTP '+r.status));
+    const started=Date.now();
+    while(Date.now()-started<18000){
+      await new Promise(res=>setTimeout(res,700));
+      const now=await fetch('panel-update.json?_='+Date.now(),{cache:'no-store'}).then(x=>x.ok?x.json():null).catch(()=>null);
+      if(now&&Number(now.checked_at||0)>Number(before.checked_at||0)){await checkPanelVersion();showSepUpdateNotice(now.update_available?'Nueva versión detectada: v'+now.latest:'Comprobación terminada: Miura Panel está al día.');return;}
+    }
+    await checkPanelVersion();showSepUpdateNotice('La comprobación se ha iniciado. El resultado aparecerá en cuanto termine.');
+  }catch(e){showSepUpdateNotice('No se pudo comprobar ahora: '+(e.message||e));}
+  finally{b.disabled=false;b.textContent=old;}
+}
+async function checkPanelVersion(){
+  try{
+    const r=await fetch('panel-update.json?'+Date.now(),{cache:'no-store'});
+    if(!r.ok)return;
+    const data=await r.json();
+    const btn=document.getElementById('sepCopyUpdate');
+    const checkBtn=document.getElementById('sepCheckUpdateNow');
+    if(!btn)return;
+    if(data.checked_at){const d=new Date(Number(data.checked_at)*1000);btn.title='Última comprobación: '+d.toLocaleString('es-ES');}
+    if(checkBtn)checkBtn.hidden=!(location.protocol==='https:'&&sepAuthenticated);
+    if(window.__miuraUpdateUI?.running)return;
+    if(data.status==='ok' && data.update_available===true && /^\d+\.\d+\.\d+$/.test(data.latest||'')){
+      btn.classList.remove('current');
+      btn.textContent='Nueva versión v'+data.latest+' · Actualizar';
+      btn.hidden=false;btn.disabled=false;
+      btn.onclick=()=>launchPanelUpdateFromHeader(data.latest,btn);
+    }else if(data.status==='ok'){
+      btn.classList.add('current');
+      btn.textContent='✓ Miura Panel al día · v1.0.34';
+      btn.hidden=false;btn.disabled=true;btn.onclick=null;
+    }else{
+      btn.hidden=true;btn.disabled=false;btn.classList.remove('current');btn.onclick=null;
+    }
+  }catch(e){/* Sin conectividad: conservar último estado conocido */}
+}
+// Cada IP:puerto es un origen distinto. El fragmento #sep-servers= transporta
+// solamente los favoritos al navegar, sin backend, cookies ni acceso remoto.
+const SEP_SERVER_KEY='sep-servers-v1';
+function sepServerAddr(x){
+  if(!x || typeof x!=='object')return null;
+  const host=String(x.host||'').trim();const p=Number(x.port);
+  const parts=host.split('.');
+  if(parts.length!==4||parts.some(n=>!/^[0-9]{1,3}$/.test(n)||Number(n)>255)||!Number.isInteger(p)||p<1||p>65535)return null;
+  return {host,port:p,label:String(x.label||`${host}:${p}`).slice(0,65),secure:x.secure===true,primary:x.primary===true,secureUserSet:x.secureUserSet===true,preferHttps:x.preferHttps===true};
+}
+function sepServerList(){
+  try{const v=JSON.parse(localStorage.getItem(SEP_SERVER_KEY)||'[]');return Array.isArray(v)?v.map(sepServerAddr).filter(Boolean).slice(0,100):[]}catch{return []}
+}
+function sepDedup(list){
+  const seen=new Set();return list.map(sepServerAddr).filter(Boolean).filter(x=>{
+    let k=x.host+':'+x.port;if(seen.has(k))return false;seen.add(k);return true;
+  }).slice(0,100);
+}
+let sepPrefsReady=false;
+let sepPrefsImported=false;
+async function sepWritePrefs(type,value){
+  const r=await fetch('/api/preferences',{
+    method:'POST',headers:{'Content-Type':'application/json','X-SEP-Preferences':'1','X-SEP-CSRF':await sepCsrf()},
+    body:JSON.stringify({type,value}),cache:'no-store'
+  });
+  let j=await r.json().catch(()=>({}));
+  if(!r.ok||j.ok!==true)throw Error(j.error||'Error guardando preferencias');
+}
+let sepServerSaveSequence=Promise.resolve();
+function sepSaveServers(list){
+  const v=sepDedup(list);
+  try{localStorage.setItem(SEP_SERVER_KEY,JSON.stringify(v))}catch{}
+  if(sepPrefsReady){
+    sepServerSaveSequence=sepServerSaveSequence.catch(()=>{}).then(()=>sepWritePrefs('servers',v));
+    sepServerSaveSequence.catch(e=>{console.error('SEP: error guardando servidores',e);sepPrefsReady=false;alert('No se pudieron guardar los servidores en este equipo. Comprueba la conexión al panel.');});
+  }
+  return v;
+}
+async function sepLoadPrefs(){
+  try{
+    const r=await fetch('/api/preferences?'+Date.now(),{cache:'no-store'});
+    if(!r.ok)throw Error('HTTP '+r.status);
+    const p=await r.json();
+    sepRemoteDiskAliases=p.disk_aliases&&typeof p.disk_aliases==='object'&&!Array.isArray(p.disk_aliases)?p.disk_aliases:{};
+    let serverList=sepDedup(p.servers||[]);
+    // Migración una sola vez desde la v1.0.9 (almacenamiento del navegador)
+    // y desde los enlaces #sep-servers al visitar otros servidores.
+    const local=sepServerList();
+    const marker='sep-servers-migrated-v110';
+    if(!localStorage.getItem(marker)||sepPrefsImported){
+      // Los datos transferidos al cambiar de equipo deben prevalecer frente a una copia antigua.
+      serverList=sepDedup(sepPrefsImported?[...local,...serverList]:[...serverList,...local]);
+      await sepWritePrefs('servers',serverList);
+      localStorage.setItem(marker,'1');
+    }
+    try{localStorage.setItem(SEP_SERVER_KEY,JSON.stringify(serverList))}catch{}
+    sepPrefsReady=true;
+    sepRenderServers();
+    loadLive();
+  }catch(e){
+    console.warn('SEP: preferencias del servidor no disponibles',e);
+    sepPrefsReady=false;
+  }
+}
+// El selector abre el panel de lectura por defecto; la administración HTTPS se solicita expresamente.
+function sepCurrent(){const https=location.protocol==='https:';return sepServerAddr({host:location.hostname,port:(Number(location.port)||(https?443:80))-(https?1:0),label:slowData?.identity?.title||location.host,secure:https,secureUserSet:https,preferHttps:https});}
+function sepImportFragment(){
+  const hash=location.hash.slice(1);
+  if(!hash.startsWith('sep-servers='))return;
+  try{
+    const bytes=Uint8Array.from(atob(hash.slice('sep-servers='.length).replace(/-/g,'+').replace(/_/g,'/')),c=>c.charCodeAt(0));
+    const list=JSON.parse(new TextDecoder().decode(bytes));
+    if(Array.isArray(list)){sepPrefsImported=true;sepSaveServers([...list,...sepServerList()]);}
+  }catch{/* No aceptar listas inválidas. */}
+  history.replaceState(null,'',location.pathname+location.search);
+}
+let sepIsPrimary=false,sepAuthenticated=false,sepVersions={},sepVersionHosts=[],sepVersionBusy=false;
+const sepInstalledVersion=()=>String(document.querySelector('.sep-ver')?.textContent||'').replace(/^v/,'');
+function sepVersionText(item,current){
+  if(item.host===current?.host&&item.port===current?.port)return 'v'+sepInstalledVersion();
+  const v=sepVersions[item.host];
+  if(v?.status==='ok')return 'v'+v.version;
+  if(v?.status==='error')return 'No disponible';
+  if(sepVersionBusy)return 'Consultando…';
+  if(!sepVersionHosts.includes(item.host))return location.protocol==='https:'?'Sin vincular SSH':'—';
+  return '—';
+}
+async function sepFetchVersions(){
+  if(location.protocol!=='https:'||sepVersionBusy||!sepAuthenticated)return;
+  sepVersionBusy=true;
+  const until=Date.now()+45000;
+  try{
+    do {
+      const r=await fetch('/api/admin/versions',{cache:'no-store'});
+      if(!r.ok)break;
+      const d=await r.json();
+      sepVersionHosts=Array.isArray(d.hosts)?d.hosts:[];
+      sepVersions=d.items||{};
+      sepRenderServers();
+      if(d.state!=='running')break;
+      await new Promise(done=>setTimeout(done,2000));
+    }while(Date.now()<until);
+  }catch(e){console.warn('Versiones SSH no disponibles',e)}
+  finally{sepVersionBusy=false;sepRenderServers()}
+}
+function sepRenderServers(){
+  let select=$('#sepServerSelect'),list=sepServerList(),current=sepCurrent();
+  if(current){
+    const idx=list.findIndex(x=>x.host===current.host&&x.port===current.port);
+    if(idx<0)list=sepSaveServers([current,...list]);
+    else {
+      let changed=false;
+      if(slowData?.identity?.title && (list[idx].label===list[idx].host+':'+list[idx].port || list[idx].label===location.host)){
+        list[idx].label=current.label;changed=true;
+      }
+      if(changed)list=sepSaveServers(list);
+    }
+  }
+  // Recordar que este equipo dispone de HTTPS con sesión comprobada.
+  // No se transporta ningún secreto al cambiar de servidor.
+  if(current&&sepAuthenticated&&location.protocol==='https:'){
+    const at=list.findIndex(x=>x.host===current.host&&x.port===current.port);
+    if(at>=0&&!list[at].preferHttps){
+      // secureUserSet lo conservan también versiones anteriores al transportar favoritos.
+      list[at]={...list[at],secure:true,secureUserSet:true,preferHttps:true};list=sepSaveServers(list);
+    }
+  }
+  // Llevar la marca del principal con los favoritos al cambiar de origen;
+  // cada servidor mantiene su propia configuración y no comparte credenciales.
+  if(current&&sepIsPrimary){
+    let updated=list.map(x=>({...x,primary:x.host===current.host&&x.port===current.port}));
+    if(updated.some((x,i)=>x.primary!==list[i].primary))list=sepSaveServers(updated);
+  }
+  const fleetDockerLink=$('#sepDockerFromAny');
+  const home=list.find(x=>x.primary);
+  if(home){
+    fleetDockerLink.href='https://'+home.host+':'+(home.port+1)+'/docker-ssh';
+    fleetDockerLink.hidden=false;
+    fleetDockerLink.title='Administrar Docker desde el principal HTTPS autenticado';
+  }else fleetDockerLink.hidden=true;
+  const key=current?`${current.host}:${current.port}`:'';
+  select.innerHTML=list.map(x=>{const shown=(x.secure?'https://':'http://')+x.host+':'+(x.port+(x.secure?1:0));return `<option value="${esc(x.host+':'+x.port)}" ${x.host+':'+x.port===key?'selected':''}>${esc(x.label)}${x.primary?' · ★ Principal':''} · ${esc(sepVersionText(x,current))} · ${esc(shown)}</option>`}).join('');
+  $('#sepRemoveServer').disabled=false;
+}
+async function sepVisitServer(key){
+  const item=sepServerList().find(x=>x.host+':'+x.port===key);if(!item)return;
+  try{await sepServerSaveSequence;}catch(e){console.warn('SEP: cambios pendientes de guardar',e);}
+  const raw=new TextEncoder().encode(JSON.stringify(sepServerList()));
+  let b='';raw.forEach(x=>b+=String.fromCharCode(x));
+  const token=btoa(b).replace(/\+/g,'-').replace(/\//g,'_').replace(/=+$/,'');
+  // Usar HTTPS cuando está explícitamente configurado o cuando ya se
+  // confirmó una sesión HTTPS en ese equipo. En HTTP siempre es invitado.
+  const wantHttps=item.preferHttps || (item.secure && (!item.primary || item.secureUserSet));
+  const dest=wantHttps?'https://'+item.host+':'+(item.port+1)+'/':'http://'+item.host+':'+item.port+'/';
+  location.assign(dest+'#sep-servers='+token);
+}
+if(location.protocol!=='https:'){
+ document.body.classList.add('sep-guest-mode');
+ $('#sepReadOnlyBanner').hidden=false;
+}
+sepImportFragment();
+sepRenderServers();
+sepLoadPrefs();
+$('#sepServerSelect').addEventListener('change',e=>sepVisitServer(e.target.value));
+$('#sepServerSelect').addEventListener('pointerdown',()=>{if(!sepVersionBusy)sepFetchVersions()});
+$('#sepServerSelect').addEventListener('focus',()=>{if(!sepVersionBusy)sepFetchVersions()});
+// Acepta también una URL completa o una barra final, pero no rutas ni credenciales.
+function sepParseServerInput(raw){
+  const m=/^(?:(https?):\/\/)?((?:\d{1,3}\.){3}\d{1,3}):(\d{1,5})\/?$/i.exec(String(raw||'').trim());
+  if(!m)return null;
+  const secure=m[1]?.toLowerCase()==='https';
+  const p=Number(m[3])-(secure?1:0);
+  return sepServerAddr({host:m[2],port:p,secure,secureUserSet:secure});
+}
+const sepDialog=$('#sepServerDialog');
+let sepDialogMode='add',sepEditingKey='';
+function sepOpenServerEditor(mode,key=''){
+  sepDialogMode=mode;
+  const selected=key||$('#sepServerSelect').value;
+  const existing=sepServerList().find(x=>x.host+':'+x.port===selected);
+  if(mode==='edit'&&!existing)return;
+  sepEditingKey=existing?existing.host+':'+existing.port:'';
+  $('#sepServerDialogTitle').textContent=mode==='edit'?'Editar servidor':'Añadir servidor';
+  $('#sepServerName').value=mode==='edit'?existing.label:'';
+  $('#sepServerAddress').value=mode==='edit'?(existing.secure?'https://'+existing.host+':'+(existing.port+1)+'/':'http://'+existing.host+':'+existing.port+'/'):'';
+  $('#sepServerAddress').disabled=false;
+  sepDialog.showModal();
+  (mode==='edit'?$('#sepServerName'):$('#sepServerAddress')).focus();
+}
+$('#sepAddServer').addEventListener('click',()=>sepOpenServerEditor('add'));
+$('#sepServerCancel').addEventListener('click',()=>sepDialog.close());
+$('#sepServerForm').addEventListener('submit',e=>{
+  e.preventDefault();
+  const name=$('#sepServerName').value.trim().slice(0,65);
+  const list=sepServerList();
+  const candidate=sepParseServerInput($('#sepServerAddress').value);
+  if(!candidate){alert('Introduce IP:puerto (HTTP) o https://IP:puerto/ (acceso seguro).');return;}
+  if(list.some(x=>x.host===candidate.host&&x.port===candidate.port&&x.host+':'+x.port!==sepEditingKey)){
+    alert('Ese servidor ya está añadido. Selecciónalo en «Editar» para modificarlo.');return;
+  }
+  candidate.label=name||candidate.host+':'+candidate.port;
+  if(sepDialogMode==='edit'){
+    candidate.primary=!!list.find(x=>x.host+':'+x.port===sepEditingKey)?.primary;
+    candidate.preferHttps=!!candidate.secure; // Editar conserva el protocolo elegido por el usuario.
+    if(!name){alert('Introduce un nombre para el servidor.');return;}
+    if(!list.some(x=>x.host+':'+x.port===sepEditingKey))return;
+    sepSaveServers(list.map(x=>x.host+':'+x.port===sepEditingKey?candidate:x));
+  }else{
+    sepSaveServers([...list,candidate]);
+  }
+  sepDialog.close();sepRenderServers();
+});
+const sepManageDialog=$('#sepManageDialog');
+function sepRenderManage(){
+  const list=sepServerList();
+  $('#sepManageList').innerHTML=list.map(x=>`<div class="sep-manage-row"><div class="sep-manage-info"><b>${esc(x.label)}</b><small>${x.secure?'HTTPS':'HTTP'} · ${esc(x.host)}:${x.port+(x.secure?1:0)}</small></div><div class="sep-manage-actions"><button type="button" class="sep-serverbutton sep-edit-item" data-id="${esc(x.host+':'+x.port)}">Editar</button><button type="button" class="sep-serverbutton sep-serverremove sep-remove-item" data-id="${esc(x.host+':'+x.port)}">Eliminar</button></div></div>`).join('')||'No hay servidores guardados';
+  $('#sepManageList').querySelectorAll('.sep-edit-item').forEach(btn=>btn.onclick=()=>{
+    sepManageDialog.close();sepOpenServerEditor('edit',btn.dataset.id);
+  });
+  $('#sepManageList').querySelectorAll('.sep-remove-item').forEach(btn=>btn.onclick=()=>{
+    if(!confirm('¿Eliminar '+btn.dataset.id+' de esta lista?'))return;
+    sepSaveServers(sepServerList().filter(x=>x.host+':'+x.port!==btn.dataset.id));
+    sepRenderManage();sepRenderServers();
+  });
+}
+$('#sepRemoveServer').addEventListener('click',()=>{sepRenderManage();sepManageDialog.showModal()});
+$('#sepManageClose').addEventListener('click',()=>sepManageDialog.close());
+// En modo invitado, el correo continúa siendo un enlace de inicio de sesión.
+// En HTTPS con sesión activa, abre un menú pequeño en lugar de navegar directamente.
+const sepAccountLink=$('#sepAdminLink');
+const sepAccountMenu=$('#sepAccountMenu');
+function sepCloseAccountMenu(){sepAccountMenu.hidden=true;sepAccountLink.setAttribute('aria-expanded','false')}
+sepAccountLink.addEventListener('click',e=>{
+  if(location.protocol!=='https:'||!sepAuthenticated)return;
+  e.preventDefault();
+  sepAccountMenu.hidden=!sepAccountMenu.hidden;
+  sepAccountLink.setAttribute('aria-expanded',String(!sepAccountMenu.hidden));
+});
+document.addEventListener('click',e=>{
+  if(!$('#sepAccountBar').contains(e.target))sepCloseAccountMenu();
+});
+document.addEventListener('keydown',e=>{
+  if(e.key==='Escape'&&!sepAccountMenu.hidden){sepCloseAccountMenu();sepAccountLink.focus()}
+});
+$('#sepAccountLogout').addEventListener('click',async()=>{
+  sepCloseAccountMenu();
+  const button=$('#sepAccountLogout');button.disabled=true;
+  try{
+    const csrf=await sepCsrf();
+    const response=await fetch('/api/admin/logout',{
+      method:'POST',credentials:'same-origin',cache:'no-store',
+      headers:{'Content-Type':'application/json','X-SEP-CSRF':csrf},body:'{}'
+    });
+    if(!response.ok)throw Error('No se pudo cerrar la sesión (HTTP '+response.status+').');
+    location.replace('/login');
+  }catch(error){alert(error.message||'Error al cerrar la sesión');button.disabled=false}
+});
+fetch('admin-status.json?'+Date.now(),{cache:'no-store'}).then(r=>r.ok?r.json():{}).then(v=>{
+  if(!v.enabled)return;
+  const link=$('#sepAdminLink');
+  link.href='https://'+location.hostname+':'+(location.protocol==='https:'?Number(location.port):Number(location.port)+1)+'/configuracion';
+  link.hidden=false;
+  link.textContent='👤 Invitado';
+  link.title='Iniciar sesión para abrir Configuración';
+  // El nombre de la cuenta es el único botón de usuario, arriba a la izquierda.
+  if(location.protocol==='https:')fetch('/api/admin/status',{cache:'no-store'}).then(r=>r.json()).then(a=>{
+    if(!a.authenticated){
+      sepAuthenticated=false;
+      sepCloseAccountMenu();
+      document.body.classList.add('sep-guest-mode');
+      $('#sepReadOnlyBanner').hidden=false;
+      link.href='/login';
+      for(const id of ['sepAddServer','sepRemoveServer'])$('#'+id).disabled=true;
+      document.querySelectorAll('.sep-disk-rename,.sep-appconfigure,.update-one,.update-group,#updateAllBtn').forEach(el=>el.disabled=true);
+    }else{
+      sepAuthenticated=true;
+      sepRenderServers();
+      document.body.classList.remove('sep-guest-mode');
+      link.textContent='👤 '+(a.account||'Usuario');
+      link.title='Abrir Configuración de la cuenta';
+      checkPanelVersion();
+    }
+  }).catch(()=>{});
+  if(location.protocol!=='https:'){
+    document.body.classList.add('sep-guest-mode');
+    $('#sepReadOnlyBanner').hidden=false;
+    for(const id of ['sepAddServer','sepRemoveServer'])$('#'+id).disabled=true;
+    document.querySelectorAll('.sep-disk-rename,.sep-appconfigure,.update-one,.update-group,#updateAllBtn').forEach(el=>el.disabled=true);
+  }
+}).catch(()=>{});
+fetch('fleet-role.json?'+Date.now(),{cache:'no-store'})
+  .then(r=>r.ok?r.json():null).then(v=>{
+    sepIsPrimary=v?.role==='principal';sepRenderServers();
+  }).catch(()=>{});
+checkPanelVersion();
+// El servidor consulta el manifiesto HTTPS cada 5 minutos; el navegador
+// refresca el aviso local cada minuto, sin necesidad de recargar la página.
+setInterval(checkPanelVersion, 60000);
+document.addEventListener('visibilitychange',()=>{if(!document.hidden)checkPanelVersion()});
+window.addEventListener('focus',checkPanelVersion);
+$('#sepCheckUpdateNow').addEventListener('click',checkPanelUpdateNow);
+$('#updateAllBtn').addEventListener('click',()=>startDockerUpdate('update_all'));loadSlow();loadLive();setInterval(loadLive,2000);setInterval(loadSlow,60000);setInterval(()=>{let tz=slowData?.identity?.weather?.timezone||slowData?.identity?.timezone||'UTC';updateWeatherClock(tz)},1000);
+</script>
+<style>
+/* SEP v1.0.15: configuración y usuario a la derecha; accesos sin downgrade implícito. */
+.sep-accountbar{grid-column:1;grid-row:1;display:flex;gap:7px;align-items:center;justify-content:flex-start;min-width:0}
+.sep-accountname{font-size:11px;color:#bedaf5;font-weight:750;max-width:220px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+#sepAdminLink{max-width:min(36vw,280px);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:12px}
+#sepAdminLink[hidden]{display:none!important}
+.sep-accountbar{justify-self:start}
+.sep-brandline>.sep-update-copy{grid-column:3;grid-row:1}
+.sep-version-link{text-decoration:none;cursor:pointer}
+.sep-version-link:hover,.sep-version-link:focus-visible{color:#f5cb76;border-color:#f5cb76;background:#2e291d}
+.sep-manage-row{min-width:0;flex-wrap:wrap}
+.sep-manage-info{min-width:0;flex:1 1 170px;overflow-wrap:anywhere}
+.sep-manage-actions{display:flex;gap:6px;flex:0 0 auto}
+.sep-serverdialog #sepManageList{min-width:0!important;max-width:100%;overflow-x:hidden;overflow-y:auto}
+.sep-serverdialog{box-sizing:border-box;max-width:min(690px,calc(100vw - 28px))!important;min-width:0!important}
+@media(max-width:900px){.sep-accountbar{grid-column:1;grid-row:2;justify-self:center;justify-content:center}.sep-brandline{grid-template-columns:1fr!important}.sep-update-copy{grid-column:1;grid-row:3;justify-self:center}}
+</style>
+
+<script>
+/* Detecta el reinicio de Miura Panel después de una actualización sin F5.
+   Nunca solicita otra instalación ni interrumpe trabajos del servidor. */
+(()=>{
+  const installedAtLoad='1.0.34';
+  let checking=false, refreshing=false;
+  async function checkReload(){
+    if(checking||refreshing)return;
+    checking=true;
+    try{
+      const r=await fetch('/version.json?_='+Date.now(),{cache:'no-store',signal:AbortSignal.timeout(4500)});
+      if(!r.ok)return;
+      const version=String((await r.json()).version||'');
+      const ui=window.__miuraUpdateUI;
+      if(ui?.running){
+        if(await detectSepUpdateFailure())return;
+        if(/^\d+\.\d+\.\d+$/.test(version)&&ui.target&&version===ui.target){
+          refreshing=true;ui.running=false;
+          window.setSepUpdateProgress?.('done',`Miura Panel v${version}`,'Completado ✓');
+          try{sessionStorage.setItem('miura-update-success',version)}catch(_e){}
+          setTimeout(()=>location.reload(),900);
+          return;
+        }
+        window.setSepUpdateProgress?.('',`Actualizando a v${ui.target}`,'Instalando…');
+      }else if(/^\d+\.\d+\.\d+$/.test(version)&&version!==installedAtLoad){
+        refreshing=true;
+        location.reload();
+      }
+    }catch(_e){
+      const ui=window.__miuraUpdateUI;
+      if(ui?.running)window.setSepUpdateProgress?.('restarting',`Actualizando a v${ui.target}`,'Reiniciando…');
+    }
+    finally{checking=false}
+  }
+  setInterval(checkReload,4000);
+  try{
+    if(sessionStorage.getItem('miura-update-success')===installedAtLoad){
+      sessionStorage.removeItem('miura-update-success');
+      setTimeout(()=>window.showSepUpdateNotice?.(`✓ Actualización completada correctamente · v${installedAtLoad}`),350);
+    }
+  }catch(_e){}
+})();
+</script>
+</body></html>
+
+<style>
+.pill.protected{color:#c5ccd8;background:rgba(148,163,184,.16);border:1px solid rgba(148,163,184,.20)}
+.pill.manual{color:#d8b4fe;background:rgba(168,85,247,.14);border:1px solid rgba(168,85,247,.20)}
+</style>
+
+<style>
+.container.docker-group{grid-column:1/-1;border-color:rgba(88,166,255,.42);background:linear-gradient(135deg,rgba(88,166,255,.10),rgba(20,25,36,.96))}
+.container.docker-group.update{border-color:rgba(210,153,34,.65);background:linear-gradient(135deg,rgba(210,153,34,.10),rgba(20,25,36,.96))}
+.pill.grouped{color:#79c0ff;background:rgba(88,166,255,.14);border:1px solid rgba(88,166,255,.22)}
+</style>
+
+<style>
+/* ===== Separación superior cabecera v11 ===== */
+.head{
+  margin-top:28px !important;
+}
+@media(max-width:620px){
+  .head{
+    margin-top:18px !important;
+  }
+}
+</style>
+
+<style>
+/* ===== Título neón v13 ===== */
+#dashboardTitle{
+  color:#dff1ff !important;
+  text-shadow:
+    0 0 4px rgba(88,166,255,.55),
+    0 0 10px rgba(88,166,255,.35),
+    0 0 18px rgba(88,166,255,.18);
+}
+</style>
+
+<style>
+/* ===== Título neón + borde v14 ===== */
+#dashboardTitle{
+  display:inline-block;
+  padding:2px 8px 3px;
+  border:1px solid rgba(88,166,255,.38);
+  border-radius:8px;
+  color:#dff1ff !important;
+  text-shadow:
+    0 0 4px rgba(88,166,255,.55),
+    0 0 10px rgba(88,166,255,.35),
+    0 0 18px rgba(88,166,255,.18);
+  box-shadow:
+    0 0 6px rgba(88,166,255,.10);
+}
+</style>
+
+<style>
+/* ===== Título neón con contorno de letras v15 ===== */
+#dashboardTitle{
+  padding:0 !important;
+  border:0 !important;
+  border-radius:0 !important;
+  box-shadow:none !important;
+
+  color:#dff1ff !important;
+  -webkit-text-stroke:0.4px rgba(88,166,255,.75);
+
+  text-shadow:
+    0 0 4px rgba(88,166,255,.55),
+    0 0 10px rgba(88,166,255,.35),
+    0 0 18px rgba(88,166,255,.18);
+}
+</style>
+
+<style>
+/* ===== Título + avisos v16 ===== */
+
+/* Contorno algo más visible en las letras */
+#dashboardTitle{
+  -webkit-text-stroke:0.8px rgba(88,166,255,.90) !important;
+}
+
+/* Tarjeta compacta de avisos dentro de la tarjeta central */
+.title-card .top-alerts{
+  display:none;
+  justify-self:center !important;
+  width:max-content !important;
+  max-width:75% !important;
+  margin:9px auto 0 !important;
+  padding:5px 10px !important;
+
+  text-align:left !important;
+  color:#f2c94c !important;
+
+  background:rgba(210,153,34,.09) !important;
+  border:1px solid rgba(210,153,34,.32) !important;
+  border-radius:7px !important;
+}
+
+.title-card .top-alerts.show{
+  display:block !important;
+}
+
+.title-card .top-alerts span{
+  display:block !important;
+  position:static !important;
+  padding:0 !important;
+  margin:1px 0 !important;
+}
+
+.title-card .top-alerts span::before,
+.title-card .top-alerts span+span::before{
+  content:"•" !important;
+  position:static !important;
+  display:inline-block !important;
+  margin-right:6px !important;
+  color:#e3b341 !important;
+}
+
+@media(max-width:620px){
+  .title-card .top-alerts{
+    max-width:95% !important;
+  }
+}
+</style>
+
+<style>
+/* ===== Centrado móvil título v17 ===== */
+@media(max-width:760px){
+  .title-card{
+    grid-template-columns:1fr auto 1fr !important;
+    justify-content:stretch !important;
+  }
+
+  .spain-flag-mark{
+    grid-column:1 !important;
+    justify-self:end !important;
+    width:42px !important;
+    margin-right:8px !important;
+  }
+
+  .title-card h1{
+    grid-column:2 !important;
+    justify-self:center !important;
+    text-align:center !important;
+  }
+
+  .title-card #sub,
+  .title-card .top-alerts{
+    grid-column:1 / -1 !important;
+  }
+}
+</style>
+
+<style>
+/* ===== Alertas: resumen compacto y desplegable flotante ===== */
+.title-card{position:relative !important;overflow:visible !important}
+.title-card .top-alerts{
+  display:none !important;position:relative !important;justify-self:center !important;
+  width:max-content !important;max-width:95% !important;margin:8px auto 0 !important;
+  padding:0 !important;background:transparent !important;border:0 !important;
+  border-radius:0 !important;z-index:50 !important;text-align:left !important;
+}
+.title-card .top-alerts.show{display:block !important}
+.top-alerts summary{list-style:none;cursor:pointer;user-select:none}
+.top-alerts summary::-webkit-details-marker{display:none}
+.alerts-summary{
+  display:inline-flex;align-items:center;gap:7px;padding:6px 10px;
+  border:1px solid rgba(210,153,34,.48);border-radius:9px;
+  background:rgba(210,153,34,.13);color:#e3b341;font-size:11px;font-weight:850;
+  white-space:nowrap;
+}
+.alerts-count{border-radius:99px;padding:2px 6px;background:rgba(210,153,34,.22)}
+.alerts-popover{
+  position:absolute;left:50%;top:calc(100% + 8px);transform:translateX(-50%);
+  width:min(460px,calc(100vw - 32px));max-height:270px;overflow:auto;
+  padding:8px;border:1px solid rgba(210,153,34,.42);border-radius:12px;
+  background:#121823;box-shadow:0 16px 38px rgba(0,0,0,.48);
+  text-align:left;z-index:999;
+}
+.alert-group+.alert-group{border-top:1px solid #30384b;padding-top:8px;margin-top:8px}
+.alert-group-title{color:#ffd866;font-size:11px;font-weight:900;padding:6px 8px}
+.alert-item{padding:8px 9px;border-bottom:1px solid rgba(255,255,255,.06);
+  color:#e9c86a;font-size:12px;line-height:1.35;overflow-wrap:anywhere}
+.alert-item:last-child{border-bottom:0}
+.alert-version{display:block;color:#9aa8bb;font-size:10px;margin-top:2px;overflow-wrap:anywhere}
+
+/* ===== SEP v1.0.3: identidad centrada y bandera exclusiva de la marca ===== */
+.sep-brandline{
+  display:flex !important;
+  justify-content:center !important;
+  align-items:center !important;
+  gap:8px;
+  width:100%;
+  margin:0 auto 5px !important;
+  min-height:24px;
+  text-align:center;
+}
+.sep-brand-logo{
+  display:block;
+  width:42px;
+  height:42px;
+  object-fit:contain;
+  flex:0 0 auto;
+  opacity:.98;
+}
+/* Mantiene el título del equipo exactamente centrado, ahora sin bandera. */
+.title-card{
+  grid-template-columns:minmax(0,1fr) !important;
+  justify-items:center !important;
+}
+.title-card #dashboardTitle{
+  grid-column:1 !important;
+  grid-row:1 !important;
+  justify-self:center !important;
+  text-align:center !important;
+}
+.title-card #sub{
+  grid-column:1 !important;
+  grid-row:2 !important;
+}
+.title-card #topAlerts{
+  grid-column:1 !important;
+  grid-row:3 !important;
+}
+@media(max-width:460px){
+  .sep-brandline{gap:6px !important;}
+  .sep-brand-logo{width:34px;height:34px;}
+  .sep-brand{font-size:10px;}
+  .sep-ver{font-size:9px;}
+  .sep-brand-stack{gap:2px}
+}
+/* SEP v1.0.8: historial en la columna izquierda, marca siempre centrada. */
+.sep-changelog-link{
+  grid-column:1;
+  grid-row:1;
+  justify-self:start;
+  color:#bbcbdf;
+  font-size:10px;
+  font-weight:750;
+  letter-spacing:.02em;
+  text-decoration:none;
+  border-bottom:1px solid rgba(160,182,209,.40);
+  padding:2px 0;
+}
+.sep-changelog-link:hover,.sep-changelog-link:focus-visible{
+  color:#f5cb76;
+  border-bottom-color:#d29922;
+}
+.sep-detail{margin-top:3px;min-height:16px;font-size:11px;color:#adbacb}
+/* SEP v1.0.4: la marca permanece centrada aunque haya una actualización. */
+.sep-brandline{
+  position:relative;
+  display:grid !important;
+  grid-template-columns:minmax(0,1fr) auto minmax(0,1fr);
+  gap:8px;
+  align-items:center;
+}
+.sep-brand-center{
+  grid-column:2;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  gap:10px;
+  white-space:nowrap;
+}
+.sep-brand-stack{display:flex;flex-direction:column;align-items:flex-start;justify-content:center;gap:3px}
+.sep-update-copy{
+  grid-column:3;
+  justify-self:end;
+  color:#83d59b;
+  border:1px solid rgba(63,185,80,.55);
+  background:rgba(63,185,80,.12);
+  font-size:11px;
+  font-weight:800;
+  border-radius:8px;
+  padding:5px 9px;
+  cursor:pointer;
+}
+.sep-update-copy:hover,.sep-update-copy:focus-visible{background:rgba(63,185,80,.23)}
+.sep-update-copy.current,.sep-update-copy.current:hover,.sep-update-copy.current:focus-visible{
+  cursor:default;color:#9ad7aa;border-color:rgba(63,185,80,.34);background:rgba(63,185,80,.07);opacity:.88
+}
+.sep-update-copy[hidden],.sep-update-feedback[hidden],.sep-update-progress[hidden]{display:none!important}
+.sep-update-progress{
+  grid-column:3;grid-row:1;justify-self:end;width:min(330px,34vw);min-width:235px;
+  border:1px solid rgba(63,185,80,.55);background:rgba(20,48,32,.92);
+  border-radius:9px;padding:7px 9px;box-shadow:0 5px 18px rgba(0,0,0,.25)
+}
+.sep-update-progress-head{display:flex;justify-content:space-between;gap:10px;align-items:center;
+  color:#d1f4d8;font-size:10px;font-weight:800;line-height:1.25}
+#sepUpdateProgressState{color:#8ee6a4;white-space:nowrap;font-weight:700}
+.sep-update-progress-track{height:6px;margin-top:6px;border-radius:999px;overflow:hidden;background:#0d1a13;border:1px solid rgba(63,185,80,.22)}
+.sep-update-progress-track span{display:block;height:100%;width:38%;border-radius:999px;
+  background:linear-gradient(90deg,#2ea043,#66d17a,#2ea043);transform:translateX(-110%);
+  animation:miuraUpdateMove 1.15s ease-in-out infinite}
+.sep-update-progress.restarting .sep-update-progress-track span{background:linear-gradient(90deg,#d29922,#f2c94c,#d29922)}
+.sep-update-progress.done{border-color:rgba(63,185,80,.8);background:rgba(20,62,35,.96)}
+.sep-update-progress.done .sep-update-progress-track span{width:100%;transform:none;animation:none;background:#3fb950}
+.sep-update-progress.error{border-color:rgba(248,81,73,.65);background:rgba(62,24,24,.96)}
+.sep-update-progress.error .sep-update-progress-track span{width:100%;transform:none;animation:none;background:#f85149}
+@keyframes miuraUpdateMove{0%{transform:translateX(-115%)}55%{transform:translateX(120%)}100%{transform:translateX(265%)}}
+.sep-update-feedback{
+  position:absolute;
+  top:calc(100% + 5px);
+  right:0;
+  max-width:min(390px,100%);
+  border:1px solid rgba(63,185,80,.48);
+  background:#17271f;
+  color:#d1f4d8;
+  padding:10px 12px;
+  border-radius:10px;
+  text-align:left;
+  font-size:12px;
+  font-weight:700;
+  z-index:100;
+  box-shadow:0 8px 25px rgba(0,0,0,.45);
+}
+@media(max-width:900px){
+  .sep-brandline{grid-template-columns:1fr !important;row-gap:4px}
+  .sep-brand-center{grid-column:1;grid-row:1;justify-self:center}
+  .sep-changelog-link{grid-column:1;grid-row:2;justify-self:center}
+  .sep-update-copy{grid-column:1;grid-row:3;justify-self:center}
+  .sep-update-progress{grid-column:1;grid-row:3;justify-self:center;width:min(92vw,330px)}
+  .sep-update-feedback{right:50%;transform:translateX(50%)}
+}
+
+#sepDockerFromAny[hidden]{display:none!important}
+#sepDockerFromAny{text-decoration:none;font-size:11px;color:#d3e4fb;border:1px solid #3d658c;background:#143052;padding:6px 8px;border-radius:8px}
+/* SEP v1.0.8: selector de equipos, favicon local y accesos Docker. */
+.sep-serverbar{display:flex;align-items:center;gap:10px;flex-wrap:wrap;
+  padding:8px 12px;margin:0 0 12px;background:#131b29;border:1px solid #2b3b4f;border-radius:12px}
+.sep-serverbar label{font-size:11px;font-weight:850;color:#f5cb76;text-transform:uppercase;letter-spacing:.08em}
+#sepServerSelect{flex:1;min-width:180px;max-width:390px;background:#0c1420;color:#e8eff9;
+  border:1px solid #38506d;border-radius:8px;padding:7px 9px;font:inherit;font-size:12px}
+.sep-serverbutton{font:inherit;font-size:12px;font-weight:800;background:#1e3651;color:#d1e7fc;
+  border:1px solid #416186;border-radius:8px;padding:6px 10px;cursor:pointer}
+.sep-serverbutton:hover{background:#2a4c70}.sep-serverbutton:disabled{opacity:.4;cursor:default}
+.sep-serverremove{background:#251d25;border-color:#57394a;color:#d7b5bb}
+.sep-serverhint{font-size:10px;color:#899bb2;margin-left:auto}
+.container[data-href]{cursor:pointer}.container[data-href]:hover{border-color:#4877a9}
+.sep-appheader{display:flex;gap:5px;align-items:center;min-width:0;flex:1}
+.sep-appname,.sep-applink{display:flex;align-items:center;gap:8px;min-width:0;overflow:hidden;
+  font-size:12px;font-weight:800;text-decoration:none;color:#e5f0ff}
+.sep-appname span:last-child,.sep-applink span:last-child{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.sep-applink:hover{color:#8bd2ff;text-decoration:underline}
+.sep-appicon{background:var(--sep-icon-bg,#46628c);width:29px;height:29px;flex:0 0 29px;
+  display:inline-flex;align-items:center;justify-content:center;position:relative;border-radius:7px;
+  color:#fff;font-size:13px;font-weight:950;letter-spacing:-.07em;overflow:hidden}
+.sep-appfavicon{position:absolute;inset:3px;width:23px;height:23px;object-fit:contain;
+  z-index:1;border-radius:3px;background:#f7fbff}
+.sep-appconfigure{border:0;background:transparent;color:#96a7bf;cursor:pointer;padding:4px;
+  font-size:13px;margin-left:1px;line-height:1}.sep-appconfigure:hover{color:#e4c67d}
+.sep-docker-hint{margin:8px 0 0}.sep-unmounted{margin-top:12px}
+.sep-emmc-card .disk-detail{display:flex;justify-content:space-between;gap:8px;padding:4px 0}
+@media(max-width:700px){.sep-serverhint{display:none}.sep-serverbar{gap:6px}#sepServerSelect{min-width:145px;max-width:none}}
+
+/* SEP v1.0.8: nombres visibles, edición clara y formularios accesibles. */
+.sep-appname,.sep-applink{font-size:15px !important;font-weight:850 !important;gap:8px}
+.sep-appheader{gap:6px;align-items:flex-start;flex-wrap:wrap}
+.sep-appconfigure{display:inline-flex;align-items:center;gap:4px;background:#213247 !important;
+  border:1px solid #395576 !important;color:#c1dcf5 !important;border-radius:7px;
+  padding:5px 7px !important;font-size:12px !important;font-weight:800;
+  line-height:1.1 !important;white-space:nowrap;transition:background .15s}
+.sep-appconfigure:hover{background:#30547a !important;color:white !important}
+.sep-appfavicon.sep-appcatalog{z-index:3}
+.sep-appfavicon.sep-appcustom{z-index:4}
+.sep-appicon{background:var(--sep-icon-bg,#46628c)}
+.sep-serverdialog{color:#edf4ff;background:#131c2c;border:1px solid #46658b;border-radius:14px;
+  padding:20px;width:min(440px,calc(100vw - 24px));box-shadow:0 20px 60px #000b}
+.sep-serverdialog::backdrop{background:rgba(0,0,0,.75)}
+.sep-serverdialog h3{margin:0 0 14px;font-size:19px;color:#e4f2ff}
+.sep-serverdialog label{font-weight:800;display:block;margin:12px 0 5px;font-size:13px}
+.sep-serverdialog input{width:100%;background:#0c1420;color:white;border:1px solid #476181;
+  border-radius:8px;font:inherit;font-size:14px;padding:10px}
+.sep-serverdialog input:focus{outline:2px solid #5fafff;outline-offset:1px}
+.sep-serverdialog input:disabled{opacity:.65}
+.sep-serverdialog p{color:#afbdd2;font-size:12px;line-height:1.5}
+.sep-serverdialog code{color:#dbeaff}
+.sep-serverdialog-actions{display:flex;justify-content:flex-end;gap:8px;margin-top:18px}
+@media(max-width:520px){.sep-appname,.sep-applink{font-size:14px !important}}
+#sepManageDialog{position:fixed!important;inset:0!important;margin:auto!important;max-height:calc(100dvh - 28px)!important;max-width:calc(100vw - 24px)!important;width:min(620px,calc(100vw - 24px))!important;overflow-y:auto!important;overflow-x:hidden!important;box-sizing:border-box!important}
+#sepManageDialog .sep-manage-row{min-width:0;overflow-wrap:anywhere;gap:10px}
+#sepManageDialog .sep-manage-row>div{min-width:0;flex:1}
+#sepManageDialog button{white-space:nowrap}
+</style>
+
+<style>
+/* Acciones privilegiadas invisibles sin sesión HTTPS (también tras actualizaciones AJAX). */
+.sep-guest-mode #sepAddServer,.sep-guest-mode #sepRenameServer,.sep-guest-mode #sepRemoveServer,
+.sep-guest-mode .sep-disk-rename,.sep-guest-mode .sep-appconfigure,
+.sep-guest-mode .update-one,.sep-guest-mode .update-group,.sep-guest-mode #updateAllBtn {display:none!important}
+/* SEP 1.0.10: etiquetas de discos editables, sin tocar el sistema. */
+.sep-disk-rename{display:inline-flex;align-items:center;gap:5px;margin-top:3px;padding:3px 7px;
+ border:1px solid #334763;border-radius:7px;background:rgba(88,166,255,.09);color:#a9cafa;
+ font:700 11px/1.2 system-ui,sans-serif;cursor:pointer}
+.sep-disk-rename:hover,.sep-disk-rename:focus-visible{background:rgba(88,166,255,.21);color:white}
+
+.docker-filters{display:flex;gap:10px;align-items:center;justify-content:space-between;flex-wrap:wrap;margin:8px 0 10px}
+#dockerSearch{min-width:220px;flex:1;max-width:340px;background:#0c1420;color:#edf5ff;border:1px solid #476181;border-radius:8px;padding:8px 10px;font:inherit;font-size:13px}
+.docker-filter-pills{display:flex;gap:7px;flex-wrap:wrap}.docker-filter-pill{font:inherit;font-size:12px;font-weight:800;padding:6px 10px;border-radius:999px;border:1px solid #78602f;background:#1f1a12;color:#f3cf7f;cursor:pointer}.docker-filter-pill.active,.docker-filter-pill:hover{background:#e0a93f;color:#17120b;border-color:#e0a93f}
+.sep-brandline{position:sticky!important;top:0;z-index:90;padding-top:6px;padding-bottom:4px;background:linear-gradient(180deg,rgba(11,16,24,.98),rgba(11,16,24,.93));backdrop-filter:blur(6px)}
+.sep-serverbar{position:sticky;top:58px;z-index:89}
+@media(max-width:900px){.sep-serverbar{top:92px}}
+
+.sep-update-actions{grid-column:3;grid-row:1;justify-self:end;display:flex;align-items:center;gap:6px}
+.sep-update-actions .sep-update-copy{grid-column:auto!important;grid-row:auto!important;justify-self:auto!important}
+.sep-update-checknow{width:30px;height:30px;border-radius:8px;border:1px solid #3b5b78;background:#142236;color:#a9cae9;font:800 15px/1 system-ui;cursor:pointer}
+.sep-update-checknow:hover,.sep-update-checknow:focus-visible{background:#1d3652;color:#fff}.sep-update-checknow:disabled{opacity:.55;cursor:wait}
+.sep-update-checknow[hidden]{display:none!important}
+@media(max-width:900px){.sep-update-actions{grid-column:1;grid-row:3;justify-self:center}}
+</style>

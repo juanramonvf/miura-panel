@@ -1,0 +1,552 @@
+<!DOCTYPE html><html lang="es"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Configuración · Miura Panel</title><link rel="icon" type="image/png" href="/assets/sep-logo.png">
+<style>
+.sep-admin-title{display:flex;align-items:center;gap:12px}.sep-admin-logo{width:34px;height:34px;object-fit:contain;flex:0 0 auto}
+:root{color-scheme:dark;--bg:#0b0f16;--card:#151c29;--line:#293a51;--accent:#59a6fa}*{box-sizing:border-box}body{margin:0;background:var(--bg);color:#e7edf7;font:14px/1.6 system-ui}main{max-width:1050px;margin:25px auto;padding:0 16px}h1{font-size:22px;color:#e8c77d}h2{font-size:17px;color:#bedbff;margin:0 0 14px}.card{border:1px solid var(--line);background:var(--card);padding:18px;border-radius:14px;margin:15px 0}input{max-width:100%;background:#0c1420;color:#fff;border:1px solid #48617c;border-radius:7px;padding:10px;min-width:0}input[type=number]{width:90px}button,.link{border:1px solid #4473a3;background:#153151;color:#d7eaff;border-radius:8px;padding:9px 13px;cursor:pointer;font:inherit;font-weight:750;text-decoration:none;display:inline-block}button:hover{background:#205080}.danger{border-color:#81515a;color:#ffe1e1}.gold{border-color:#bf9136;color:#ffe4a3}.row{display:flex;gap:9px;flex-wrap:wrap;align-items:center;margin:8px 0}.grow{flex:1}.muted{color:#a6b8ce;font-size:13px}.status{border-left:4px solid #4d9bea;padding:10px 13px;background:#0e1a28;border-radius:7px;margin:10px 0}.alert{border-color:#e3a53d}.principal{color:#fcd87b;background:#372913;border:2px solid #d3a448;border-radius:10px;padding:10px;font-weight:900;display:inline-block}.hidden{display:none}.target{border-bottom:1px solid #344359;padding:10px 3px;display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap}.code{white-space:pre-wrap;word-break:break-all;background:#09111b;padding:10px;border-radius:8px;color:#d1e5ff;font:12px monospace}details{margin-top:12px}#notice{position:sticky;top:5px;z-index:5}button:disabled{opacity:.5;cursor:not-allowed}
+/* Seguimiento sin JSON visible, con estados y progreso verificable. */
+#fleetProgress{margin-top:14px;border:1px solid #31465f;background:#101c2c;padding:16px;border-radius:10px}
+#batchNotice{margin:12px 0}#batchNotice.success{border-color:#31b77b}#batchNotice.error{border-color:#ea6363}
+#fleetHeader{display:flex;align-items:center;justify-content:space-between;gap:14px;flex-wrap:wrap}
+#progressPercent{font-weight:900;font-variant-numeric:tabular-nums;font-size:25px;color:#bedbff}
+#progressTrack{height:12px;border-radius:999px;background:#28384e;overflow:hidden;margin:12px 0 7px}
+#progressFill{height:100%;background:#4d9bea;width:0%;transition:width .35s ease}
+#progressFill.complete{background:#31b77b}#progressFill.failed{background:#e7ab49}
+#jobRows{margin:14px 0 4px;display:grid;gap:9px}
+.job-row{display:flex;gap:12px;align-items:center;justify-content:space-between;border:1px solid #304259;background:#131f30;padding:12px;border-radius:9px}
+.job-row-meta{flex:1;min-width:0}.job-row-name{font-weight:800}.job-row-detail{font-size:12px;color:#b1c3d9;overflow-wrap:anywhere}
+.job-pill{font-weight:800;white-space:nowrap;border-radius:20px;border:1px solid #53759c;color:#c1defe;padding:4px 9px;font-size:12px}
+.job-pill.waiting{color:#b1c3d9;border-color:#405066}.job-pill.running{color:#ffe1a3;border-color:#c59c3b}.job-pill.ok{color:#a3f4ca;border-color:#348b66}.job-pill.error{color:#ffc3c3;border-color:#bc6060}
+#jobEvents{margin:10px 0 0;padding-left:18px;max-height:230px;overflow-y:auto;font-size:13px;color:#bfd0e4}
+#jobEvents li{margin:5px 0}#jobHistory .history-item{padding:10px;border-bottom:1px solid #344359}
+#jobHistory .history-item:last-child{border:0}#jobRaw{max-height:350px;overflow:auto}
+@media(max-width:620px){.job-row{align-items:flex-start;flex-direction:column}.job-pill{align-self:flex-start}}
+#accountForm{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px 18px;align-items:start}
+#accountForm .account-group{min-width:0;display:grid;gap:12px;align-content:start;padding:14px;background:#101827;border:1px solid #2c4058;border-radius:10px}
+#accountForm .account-group h3{margin:0 0 2px;font-size:14px;color:#d3e6ff}
+#accountForm .account-group .muted{margin:2px 0 0;line-height:1.5}
+#accountForm .account-wide{grid-column:1/-1}
+#accountForm .account-sessions{display:flex;align-items:flex-end;flex-wrap:wrap;gap:9px}
+#accountForm .account-sessions label{max-width:170px}
+@media(max-width:700px){#accountForm{grid-template-columns:minmax(0,1fr)}}
+#accountForm label,#smtpForm label{display:flex;flex-direction:column;gap:5px;color:#bed1e7;font-size:13px;min-width:0}
+#accountForm input,#smtpForm input,#smtpForm select{width:100%;margin:0;box-sizing:border-box}
+#accountForm .row{grid-column:1/-1}
+#smtpForm .row>label{flex:1 1 180px}
+/* Rol principal compacto y con controles alineados horizontalmente. */
+#principalActions{display:flex;align-items:center;gap:7px;flex-wrap:wrap;margin-top:9px}
+#principalRole{display:inline-flex;align-items:center;min-height:30px}
+#principalRole .principal{font-size:12px;padding:4px 9px;border-width:1px;
+  border-radius:7px;box-shadow:none;line-height:1.5}
+#principalActions button{padding:5px 9px;font-size:12px;line-height:1.5;border-radius:7px}
+#principalActions button[hidden]{display:none!important}
+.admin-accountbar{position:relative;display:inline-block;margin:0 0 4px}
+.admin-account-trigger{font-size:12px;padding:6px 11px;display:flex;align-items:center;gap:7px}
+.admin-account-menu{position:absolute;z-index:300;top:calc(100% + 6px);left:0;min-width:190px;padding:5px;background:#182233;border:1px solid #38506a;border-radius:9px;box-shadow:0 12px 25px #0009}
+.admin-account-menu[hidden]{display:none!important}
+.admin-account-menu a,.admin-account-menu button{display:block;width:100%;padding:9px 10px;text-align:left;border:0;background:transparent;color:#d8e6f5;text-decoration:none;border-radius:6px;font-size:12px;font-weight:650}
+.admin-account-menu a:hover,.admin-account-menu button:hover{background:#284463}
+.admin-account-menu button{color:#ffd6d6}
+/* Gestión Docker remota solo desde el principal autenticado. */
+#dockerRemoto[hidden]{display:none!important}
+#remoteDockerTarget{background:#0c1420;color:#eaf2ff;border:1px solid #47617b;border-radius:8px;padding:9px;min-width:min(100%,280px)}
+#remoteDockerRows{display:grid;grid-template-columns:repeat(auto-fit,minmax(250px,1fr));gap:9px;margin:12px 0}
+.remote-docker-row{border:1px solid #30445d;background:#101a29;border-radius:9px;padding:11px;min-width:0}
+.remote-docker-row strong{display:block;overflow-wrap:anywhere}
+.remote-docker-row small{display:block;color:#b7c8df;margin:3px 0 8px}
+.remote-docker-row button{font-size:12px;padding:5px 8px}
+#remoteDockerLog{max-height:180px;overflow:auto;font-size:12px}
+#remoteDockerServers{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:10px;margin:12px 0 18px}
+.remote-docker-server{border:1px solid #30445d;background:#101a29;border-radius:10px;padding:12px;min-width:0}
+.remote-docker-server-head{display:flex;align-items:flex-start;justify-content:space-between;gap:10px}
+.remote-docker-server strong{display:block;overflow-wrap:anywhere}
+.remote-docker-server small{display:block;color:#9eb2cb;margin-top:2px;overflow-wrap:anywhere}
+.remote-docker-state{white-space:nowrap;border:1px solid #52657c;border-radius:999px;padding:3px 8px;font-size:11px;font-weight:900}
+.remote-docker-state.authorized{color:#a8f0c9;border-color:#378763;background:#10291f}
+.remote-docker-state.not_authorized{color:#ffe0a0;border-color:#a57a2d;background:#2e2413}
+.remote-docker-state.no_docker{color:#c0cad8;border-color:#576474;background:#1d2530}
+.remote-docker-state.unavailable{color:#ffc0c0;border-color:#a74e4e;background:#311818}
+.remote-docker-state.checking{color:#bedbff;border-color:#4d739d;background:#15283e}
+.remote-docker-detail{margin:9px 0 0;color:#c0cfe0;font-size:12px;line-height:1.5}
+.remote-docker-command{margin-top:9px;display:flex;gap:7px;align-items:stretch}
+.remote-docker-command code{flex:1;min-width:0;overflow-wrap:anywhere;background:#09111b;border-radius:7px;padding:8px;color:#f4d391;font:11px/1.45 monospace}
+.remote-docker-command button,.remote-docker-server .manage-docker{padding:6px 9px;font-size:11px}
+.remote-docker-server-actions{display:flex;gap:7px;flex-wrap:wrap;margin-top:9px}
+.miura-divider{border:0;border-top:1px solid #30445d;margin:18px 0}
+
+/* v1.0.27: ayuda contextual no intrusiva en cada sección. */
+.miura-section-title{display:flex;align-items:center;gap:9px;flex-wrap:wrap}
+.miura-question{display:inline-grid;place-items:center;border:1px solid #a78546;background:#302515;color:#ffda88;border-radius:50%;width:23px;height:23px;padding:0;flex:0 0 23px;cursor:pointer;font-weight:900;font-size:13px;line-height:1}
+.miura-question:hover,.miura-question:focus-visible{border-color:#f5cd7c;background:#4c3617;outline-offset:2px}
+.miura-hint{border:1px solid #59482a;border-left:3px solid #d0a457;background:#241e17;color:#efdab5;line-height:1.6;border-radius:8px;padding:11px 13px;margin:9px 0 13px;font-size:13px;overflow-wrap:anywhere}
+.miura-hint[hidden]{display:none!important}
+.miura-hint a{color:#f1c16f;display:inline-block;margin-left:3px}
+
+/* Docker SSH tiene su propia pantalla de gestión, sin duplicar la administración. */
+body.miura-docker-view section.card:not(#dockerRemoto):not(#miura-docker-unavailable){display:none!important}
+.miura-docker-settings{display:none}
+body.miura-docker-view .miura-docker-settings{display:inline-flex}
+body.miura-docker-view #dockerRemoto{margin-top:15px}
+</style></head><body><main>
+<div class="row"><h1 class="grow sep-admin-title"><img class="sep-admin-logo" src="/assets/sep-logo.png" alt="Miura Panel"> Miura Panel — Configuración</h1><a class="link miura-docker-settings" href="/configuracion">Configuración</a><a class="link" href="/">Volver al panel</a></div>
+<div class="admin-accountbar" id="adminAccountBar"><button id="adminAccountTrigger" class="admin-account-trigger" type="button" aria-expanded="false" aria-controls="adminAccountMenu">👤 Cuenta</button><div class="admin-account-menu" id="adminAccountMenu" role="menu" aria-label="Opciones de cuenta" hidden><a href="/" role="menuitem">↩ Volver al panel</a><button type="button" id="logout" role="menuitem">↪ Cerrar sesión</button></div></div>
+<div id="notice" role="status" class="status hidden"></div>
+<section class="card"><h2 class="miura-section-title">Servidor principal <button class="miura-question" type="button" aria-expanded="false" aria-controls="miura-help-principal" aria-label="Mostrar ayuda sobre Servidor principal" title="¿Qué hace esta sección?">?</button></h2><div id="miura-help-principal" class="miura-hint" hidden>Enciende este rol solo en el equipo que controlará el resto (por ejemplo, Debian16). No instala una VPN ni abre puertos. Si solo usas una máquina, puedes dejarlo desactivado. <a href="https://sep.mundopeke.es/ayuda.html#principal" target="_blank" rel="noopener noreferrer">Ver instrucciones completas ↗</a></div><p>Este rol habilita la coordinación de actualizaciones de varios servidores. No instala VPN ni abre puertos.</p><div id="principalActions"><div id="principalRole"></div><button id="setPrincipal" class="gold">★ Designar como principal</button><button id="unsetPrincipal">Quitar rol principal</button></div></section>
+<section class="card"><h2 class="miura-section-title">Acceso SSH restringido <button class="miura-question" type="button" aria-expanded="false" aria-controls="miura-help-ssh" aria-label="Mostrar ayuda sobre Acceso SSH restringido" title="¿Qué hace esta sección?">?</button></h2><div id="miura-help-ssh" class="miura-hint" hidden>Pulsa «Generar/ver clave pública». Copia el comando de autorización que aparece y ejecútalo UNA vez por terminal en cada equipo de destino. Nunca copies una clave privada ni abras acceso SSH de root. <a href="https://sep.mundopeke.es/ayuda.html#ssh" target="_blank" rel="noopener noreferrer">Ver instrucciones completas ↗</a></div><p>El servidor principal genera su propia clave. Autorízala una sola vez en cada destino por SSH; la clave privada nunca sale de este equipo.</p><button id="createKey">Generar/ver clave pública SEP</button><div id="keyInfo" class="hidden"><p>En cada servidor de destino, ejecuta por SSH:</p><div id="allow" class="code"></div><button id="copyAllow">Copiar autorización</button></div></section>
+<section class="card"><h2 class="miura-section-title">Equipos autorizados para actualización <button class="miura-question" type="button" aria-expanded="false" aria-controls="miura-help-equipos" aria-label="Mostrar ayuda sobre Equipos autorizados para actualización" title="¿Qué hace esta sección?">?</button></h2><div id="miura-help-equipos" class="miura-hint" hidden>Elige un equipo guardado, comprueba el puerto SSH real y pulsa «Consultar huella SSH». En la consola del destino, compara la huella Ed25519 con la mostrada. Solo si coinciden, marca la confirmación y autoriza. El puerto SSH puede ser distinto de 22. <a href="https://sep.mundopeke.es/ayuda.html#equipos" target="_blank" rel="noopener noreferrer">Ver instrucciones completas ↗</a></div><p class="muted">Estos son equipos SSH; son vinculados a los equipos guardados en el selector del panel. El acceso se limita a comprobar y actualizar SEP.</p><div id="targets"></div><div id="unlinkedSaved"></div><h3>Preparar conexión SSH</h3>
+<p class="muted">Los equipos que ya aparecen en el selector del panel se muestran aquí automáticamente; no hace falta escribirlos otra vez. Cada host requiere autorizar su clave pública y verificar su huella una sola vez.</p>
+<div class="row"><label>Equipo guardado <select id="savedHost" style="background:#0c1420;color:#fff;padding:10px;border:1px solid #48617c;max-width:350px"><option value="">Elegir equipo guardado…</option></select></label><button id="useSaved" type="button">Usar equipo</button></div>
+<form id="scanForm" class="row"><input id="targetName" placeholder="Nombre del equipo" required maxlength="64"><input id="targetHost" placeholder="IP o DNS SSH" required><label>Puerto SSH <input id="targetPort" type="number" min="1" max="65535" value="22" required></label><button>Consultar huella SSH</button></form>
+<div id="sshNotice" class="status hidden" role="status" aria-live="polite"></div><div id="fingerprintBlock" class="hidden"><p class="status alert">Antes de autorizar, <strong>compara esta huella</strong> con la obtenida directamente en la consola SSH del destino. No aceptes una huella no verificada. <strong>Válida durante 5 minutos.</strong></p><div class="row"><div id="fingerprint" class="code grow"></div><button id="copyFingerprint" type="button">Copiar huella</button></div><p>Comando que debes ejecutar en el destino para verificar:</p><div class="row"><div id="verifyCommand" class="code grow">ssh-keygen -lf /etc/ssh/ssh_host_ed25519_key.pub -E sha256</div><button id="copyVerifyCommand" type="button">Copiar comando</button></div><label><input id="verified" type="checkbox"> He comprobado personalmente que ambas huellas coinciden.</label><div class="row"><button id="addTarget" type="button" class="gold" disabled>Autorizar y añadir</button></div></div></section>
+<section class="card"><h2 class="miura-section-title">Actualizaciones de Miura Panel <button class="miura-question" type="button" aria-expanded="false" aria-controls="miura-help-actualizaciones" aria-label="Mostrar ayuda sobre Actualizaciones de Miura Panel" title="¿Qué hace esta sección?">?</button></h2><div id="miura-help-actualizaciones" class="miura-hint" hidden>Primero usa «Comprobar todos» para revisar versiones y conexión. «Actualizar todos» instala secuencialmente los destinos y deja el principal para el final. Hazlo en una ventana de mantenimiento. Las actualizaciones no equivalen a una copia completa del sistema. <a href="https://sep.mundopeke.es/ayuda.html#actualizaciones" target="_blank" rel="noopener noreferrer">Ver instrucciones completas ↗</a></div><p>Primero se comprobarán todos los destinos SSH. Si alguno falla, se cancelará el lote antes de modificar ningún servidor. Las actualizaciones se harán secuencialmente, y la del principal será la última.</p>
+<div class="row"><button id="checkAll">Comprobar todos</button><button id="updateAll" class="gold">Actualizar todos</button><button id="updateLocal">Actualizar solo este panel</button></div>
+<div id="batchNotice" class="status hidden" role="status" aria-live="polite"></div>
+<div id="fleetProgress" class="hidden" aria-label="Progreso de servidores">
+  <div id="fleetHeader"><div><strong id="jobHeading">Estado de servidores</strong><div class="muted" id="jobSubtitle"></div></div><div id="progressPercent" aria-live="off">0 %</div></div>
+  <div id="progressTrack" role="progressbar" aria-label="Progreso global" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"><div id="progressFill"></div></div>
+  <div class="muted" id="progressCount"></div>
+  <div id="jobRows"></div>
+  <details id="eventsDetails"><summary>Registro de operaciones</summary><ol id="jobEvents"></ol></details>
+  <details><summary>Detalles técnicos (diagnóstico)</summary><pre id="jobRaw" class="code"></pre></details>
+</div>
+<div id="localState" class="muted" style="margin-top:10px"></div>
+<details id="historyDetails"><summary>Historial de las últimas actualizaciones y comprobaciones</summary><div id="jobHistory" class="muted">Sin historial.</div></details>
+</section>
+<section class="card" id="miura-docker-unavailable" hidden><h2>Docker SSH no disponible</h2><p>Esta función solo se puede utilizar desde un servidor designado como principal, con sesión HTTPS autenticada.</p><a class="link" href="/configuracion">Ir a Configuración</a></section>
+<section class="card" id="dockerRemoto" hidden>
+<h2 class="miura-section-title">Docker remoto · SSH <button class="miura-question" type="button" aria-expanded="false" aria-controls="miura-help-docker" aria-label="Mostrar ayuda sobre Docker remoto · SSH" title="¿Qué hace esta sección?">?</button></h2><div id="miura-help-docker" class="miura-hint" hidden>Solo disponible en el servidor principal. Antes debes vincular el SSH del destino, activar allí la gestión Docker local y autorizarla expresamente mediante «sudo miura-panel-fleet docker-enable». «Consultar Docker» no modifica contenedores. Las actualizaciones compatibles pueden reiniciar servicios; Portainer y stacks no verificables no se gestionan por seguridad. <a href="https://sep.mundopeke.es/ayuda.html#docker" target="_blank" rel="noopener noreferrer">Ver instrucciones completas ↗</a></div><p>Gestiona actualizaciones compatibles desde este servidor principal, sin iniciar sesión en los destinos. Cada destino requiere autorización local expresa: <code>sudo miura-panel-fleet docker-enable</code> y el actualizador Docker local activo. Portainer y stacks no verificables permanecen protegidos.</p>
+<div class="row"><strong class="grow">Estado de los servidores vinculados</strong><button id="remoteDockerProbeAll" type="button">Comprobar servidores</button></div>
+<p class="muted">Aquí puedes ver de un vistazo si cada destino está autorizado, no tiene Docker o no responde. Si falta permiso, Miura Panel te muestra el comando exacto y el equipo donde debes ejecutarlo.</p>
+<div id="remoteDockerServers" aria-live="polite"></div>
+<hr class="miura-divider">
+<h3>Gestionar un servidor autorizado</h3>
+<div class="row"><select id="remoteDockerTarget" aria-label="Servidor Docker remoto"><option value="">Elige un servidor SSH…</option></select><button id="remoteDockerRefresh" type="button">Consultar Docker</button><button id="remoteDockerUpdateAll" class="gold" type="button" disabled>Actualizar compatibles</button></div>
+<div id="remoteDockerNotice" class="status" role="status">Selecciona un equipo autorizado para consultar sus contenedores.</div>
+<div id="remoteDockerRows"></div>
+<details id="remoteDockerDetails" hidden><summary>Seguimiento de la actualización</summary><pre id="remoteDockerLog" class="code" aria-live="polite"></pre></details>
+</section>
+<section class="card"><h2 class="miura-section-title">Cuenta y contraseña <button class="miura-question" type="button" aria-expanded="false" aria-controls="miura-help-cuenta" aria-label="Mostrar ayuda sobre Cuenta y contraseña" title="¿Qué hace esta sección?">?</button></h2><div id="miura-help-cuenta" class="miura-hint" hidden>El correo identifica al administrador. Para cambiarlo escribe dos veces la dirección y la contraseña actual. La contraseña nueva es opcional y también debe repetirse. Guardar puede cerrar las sesiones activas; comprueba bien el correo antes de confirmar. <a href="https://sep.mundopeke.es/ayuda.html#cuenta" target="_blank" rel="noopener noreferrer">Ver instrucciones completas ↗</a></div><p>La cuenta administradora utiliza correo electrónico. Para cambiarla se requiere la contraseña actual. Se cerrarán todas las sesiones al guardar.</p>
+<form id="accountForm">
+  <div class="account-group"><h3>Correo de acceso</h3>
+    <label>Correo electrónico <input id="accountEmail" type="email" maxlength="254" autocomplete="email" required></label>
+    <label>Repite el correo <input id="accountEmailConfirm" type="email" maxlength="254" autocomplete="off" required></label>
+    <p id="emailVerifyHint" class="muted">Si configuras SMTP, el nuevo correo deberá verificarse antes de activarse. Sin SMTP se solicitará confirmación explícita.</p>
+  </div>
+  <div class="account-group"><h3>Contraseña</h3>
+    <label>Contraseña actual <input id="accountOld" type="password" autocomplete="current-password" required></label>
+    <label>Nueva contraseña (opcional) <input id="accountNew" type="password" minlength="12" autocomplete="new-password"></label>
+    <label>Repite la nueva contraseña <input id="accountNewConfirm" type="password" minlength="12" autocomplete="new-password"></label>
+  </div>
+  <div id="accountNotice" class="status hidden account-wide" role="status"></div>
+  <div class="row account-wide"><button type="submit">Guardar cuenta</button><button id="logoutAll" class="danger" type="button">Cerrar todas las sesiones</button></div>
+  <div class="account-sessions account-wide"><label>Caducidad de sesión <select id="sessionHours" style="background:#0c1420;color:#fff;padding:10px"><option value="1">1 hora</option><option value="4">4 horas</option><option value="12">12 horas</option><option value="24">24 horas</option><option value="168">7 días</option></select></label><button id="saveSession" type="button">Guardar caducidad</button></div>
+</form></section>
+<section class="card"><h2 class="miura-section-title">Recuperación por correo SMTP <button class="miura-question" type="button" aria-expanded="false" aria-controls="miura-help-smtp" aria-label="Mostrar ayuda sobre Recuperación por correo SMTP" title="¿Qué hace esta sección?">?</button></h2><div id="miura-help-smtp" class="miura-hint" hidden>Opcional. Configura servidor, puerto TLS, usuario, contraseña de aplicación y remitente. Pulsa primero «Enviar correo de prueba y guardar». El enlace de recuperación caduca a los 20 minutos. Si no hay SMTP, usa «sudo miura-panel-admin-setup --recover» desde la terminal del propio servidor. <a href="https://sep.mundopeke.es/ayuda.html#smtp" target="_blank" rel="noopener noreferrer">Ver instrucciones completas ↗</a></div>
+<p>Opcional. Permite «He olvidado mi contraseña» con un enlace HTTPS de un solo uso válido durante 20 minutos. La conexión exige TLS. Las credenciales se guardan en un archivo privado con permisos restrictivos (no cifrado en disco ni visible desde la web). Usa preferentemente una contraseña de aplicación y una cuenta exclusiva.</p>
+<div id="smtpStatus" class="status">SMTP sin configurar</div>
+<form id="smtpForm"><div class="row"><label>Servidor SMTP <input id="smtpHost" placeholder="smtp.ejemplo.es" required></label><label>Puerto <input id="smtpPort" type="number" min="1" max="65535" value="465" required></label><label>Conexión <select id="smtpTls" style="background:#0c1420;color:#fff;padding:10px"><option value="ssl">SSL/TLS (465)</option><option value="starttls">STARTTLS (587)</option></select></label></div>
+<div class="row"><label>Usuario SMTP <input id="smtpUser" autocomplete="off"></label><label>Contraseña de aplicación <input id="smtpPassword" type="password" autocomplete="off" placeholder="Vacío = conservar la actual"></label><label>Remitente <input id="smtpFrom" autocomplete="off" placeholder="miura@example.com" required></label></div>
+<div class="row"><button type="submit">Guardar SMTP</button><button id="smtpTest" type="button">Enviar correo de prueba y guardar</button><button id="smtpDisable" type="button" class="danger">Desactivar recuperación por correo</button></div></form>
+</section>
+<section class="card"><h2 class="miura-section-title">HTTPS y certificados <button class="miura-question" type="button" aria-expanded="false" aria-controls="miura-help-https" aria-label="Mostrar ayuda sobre HTTPS y certificados" title="¿Qué hace esta sección?">?</button></h2><div id="miura-help-https" class="miura-hint" hidden>La administración requiere HTTPS y estar autenticado. Se configura desde la terminal con «sudo miura-panel-admin-setup». Los certificados locales pueden mostrar advertencias en el navegador. Añadir una URL https:// a un favorito NO activa HTTPS en ese equipo. No publiques la administración directamente en Internet. <a href="https://sep.mundopeke.es/ayuda.html#https" target="_blank" rel="noopener noreferrer">Ver instrucciones completas ↗</a></div><p>Certificado actual: <span id="certCurrent"></span>.</p><p>Los certificados locales, Let's Encrypt o propios se configuran desde la consola del servidor mediante <code>sudo miura-panel-admin-setup</code>. Por seguridad, la clave privada TLS no se muestra ni se descarga desde la web. Si olvidaste la contraseña y no tienes SMTP, recupera desde SSH mediante <code>sudo miura-panel-admin-setup --recover</code>.</p><p class="muted">No expongas la administración directamente a Internet. Mantén una red fiable, un firewall adecuado y las versiones actualizadas.</p></section></main>
+<script>
+let csrf='',state=null,pendingScan=null;
+const $=q=>document.querySelector(q), esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+function note(message,bad=false){const el=$('#notice');el.classList.remove('hidden');el.textContent=message;el.style.borderColor=bad?'#d25252':'#4d9bea'}
+function sshNote(message,bad=false){const box=$('#sshNotice');box.classList.remove('hidden');box.textContent=message;box.style.borderColor=bad?'#d25252':'#4d9bea'}
+async function copyText(id){try{await navigator.clipboard.writeText($(id).textContent);sshNote('Copiado al portapapeles.')}catch(e){sshNote('No se ha podido copiar: '+e.message,true)}}
+$('#copyFingerprint').onclick=()=>copyText('#fingerprint');
+$('#copyVerifyCommand').onclick=()=>copyText('#verifyCommand');
+async function api(path,data){let r=await fetch('/api/admin/'+path,{method:'POST',headers:{'Content-Type':'application/json','X-SEP-CSRF':csrf},body:JSON.stringify(data||{}),cache:'no-store'});let j=await r.json().catch(()=>({}));if(!r.ok||j.ok===false)throw Error(j.error||'HTTP '+r.status);return j}
+async function load(){let r=await fetch('/api/admin/state',{cache:'no-store'});if(r.status===401){location.replace('/login');return}let j=await r.json();if(!r.ok)throw Error(j.error||'Fallo de autenticación');state=j;csrf=j.csrf;$('#principalRole').innerHTML=j.principal?'<strong class="principal">★ Principal activo</strong>':'<span class="muted">Este servidor no es el principal.</span>';
+$('#setPrincipal').hidden=j.principal;$('#unsetPrincipal').hidden=!j.principal;$('#updateAll').disabled=!j.principal;
+updateRemoteDockerTargets(j);
+$('#targets').innerHTML=j.targets.length?j.targets.map(t=>`<div class="target"><div><b>${esc(t.name)}</b><div class="muted">${esc(t.host)}:${esc(t.port)} (SSH)</div></div><button class="danger removeTarget" data-host="${esc(t.host)}" data-port="${t.port}">Quitar</button></div>`).join(''):'<p class="muted">Aún no hay destinos SSH registrados.</p>';
+if(j.public_key)showKey(j.public_key);$('#adminAccountTrigger').textContent='👤 '+(j.account||'Cuenta');$('#accountEmail').value=j.account||'';$('#accountEmailConfirm').value='';$('#sessionHours').value=String(j.session_hours||12);
+const sc=j.smtp||{};$('#smtpHost').value=sc.host||'';$('#smtpPort').value=sc.port||465;$('#smtpTls').value=sc.tls||'ssl';$('#smtpUser').value=sc.username||'';$('#smtpFrom').value=sc.from||'';$('#certCurrent').textContent=j.certificate?.domain||'Local / IP';$('#smtpStatus').textContent=j.smtp?.host?'SMTP configurado (contraseña no visible)':'SMTP sin configurar';
+const list=j.saved_servers||[];$('#savedHost').innerHTML='<option value="">Elegir equipo guardado…</option>'+list.map((v,i)=>`<option value="${i}">${esc(v.name||v.host)} · ${esc(v.host)}:${esc(v.webport)}</option>`).join('');
+window.sepSaved=list;
+const authorised=new Set((j.targets||[]).map(v=>v.host));
+const currentHost=location.hostname;
+const pending=list.map((v,i)=>({v,i})).filter(({v})=>!authorised.has(v.host)&&v.host!==currentHost);
+$('#unlinkedSaved').innerHTML=pending.length?'<h3>Pendientes de vincular por SSH</h3>'+pending.map(({v,i})=>`<div class="target"><span><b>${esc(v.name||v.host)}</b> · ${esc(v.host)} <small class="muted">(guardado en el panel)</small></span><button type="button" class="linkSaved" data-i="${i}">Verificar huella SSH</button></div>`).join(''):'';
+for(const b of document.querySelectorAll('.linkSaved'))b.onclick=()=>{
+ const v=window.sepSaved[Number(b.dataset.i)];if(!v)return;
+ $('#targetName').value=v.name;$('#targetHost').value=v.host;$('#targetPort').value=22;
+ $('#scanForm').requestSubmit();
+};
+$('#localState').textContent='Actualización local: '+(j.local?.ActiveState||'N/D')+' · resultado '+(j.local?.Result||'N/D');
+for(const b of document.querySelectorAll('.removeTarget'))b.onclick=async()=>{if(!confirm('¿Quitar este destino de la lista? Se mantendrá la autorización SSH remota.'))return;try{await api('remove',{host:b.dataset.host,port:Number(b.dataset.port)});await load();note('Destino retirado. Puedes revocar la clave manualmente en el servidor remoto.')}catch(e){note(e.message,true)}}}
+function showKey(pub){$('#keyInfo').classList.remove('hidden');$('#allow').textContent="sudo miura-panel-fleet allow '"+pub+"'"}
+$('#copyAllow').onclick=async()=>{await navigator.clipboard.writeText($('#allow').textContent);note('Comando de autorización copiado.')};
+$('#setPrincipal').onclick=async()=>{if(!confirm('¿Designar este equipo como servidor principal?'))return;try{await api('primary',{enable:true});await new Promise(r=>setTimeout(r,800));await load();note('Principal activado')}catch(e){note(e.message,true)}};
+$('#unsetPrincipal').onclick=async()=>{if(!confirm('¿Quitar el rol principal?'))return;try{await api('primary',{enable:false});await new Promise(r=>setTimeout(r,800));await load();note('Rol principal desactivado')}catch(e){note(e.message,true)}};
+$('#createKey').onclick=async()=>{try{let j=await api('key');showKey(j.public_key);note('Clave pública disponible; autoriza cada destino una vez.')}catch(e){note(e.message,true)}};
+$('#scanForm').onsubmit=async e=>{e.preventDefault();$('#fingerprintBlock').classList.add('hidden');pendingScan=null;let name=$('#targetName').value.trim(),host=$('#targetHost').value.trim(),port=Number($('#targetPort').value);try{sshNote('Consultando huella SSH…');let j=await api('scan',{host,port});pendingScan={name,host,port,fingerprint:j.fingerprint};$('#fingerprint').textContent=j.fingerprint;$('#verified').checked=false;$('#addTarget').disabled=true;$('#fingerprintBlock').classList.remove('hidden');sshNote('Compara la huella en la consola del destino antes de autorizarla. Caduca a los 5 minutos.')}catch(ex){sshNote(ex.message,true)}};
+$('#useSaved').onclick=()=>{let i=Number($('#savedHost').value);if($('#savedHost').value===''||!window.sepSaved?.[i])return;const v=window.sepSaved[i];$('#targetName').value=v.name;$('#targetHost').value=v.host;$('#targetPort').value=22;sshNote('Equipo seleccionado. Verifica la huella SSH antes de autorizarlo.')};
+function accountNote(msg,bad=false){const el=$('#accountNotice');el.classList.remove('hidden');el.textContent=msg;el.style.borderColor=bad?'#d25252':'#4d9bea'}
+$('#accountForm').onsubmit=async e=>{
+  e.preventDefault();
+  let mail=$('#accountEmail').value.trim().toLowerCase(),repeat=$('#accountEmailConfirm').value.trim().toLowerCase();
+  let pass=$('#accountNew').value,passRepeat=$('#accountNewConfirm').value;
+  if(mail!==repeat){accountNote('Los dos correos electrónicos no coinciden.',true);return}
+  if(pass!==passRepeat){accountNote('Las nuevas contraseñas no coinciden.',true);return}
+  if(mail!==state?.account?.toLowerCase()){
+    if(!confirm('Vas a cambiar el correo de acceso a:\n'+mail+'\n\n¿Has comprobado que está escrito correctamente?'))return;
+  }
+  try{
+    const j=await api('account',{email:mail,email_confirm:repeat,confirmed_email:true,
+      current_password:$('#accountOld').value,new_password:pass,new_password_confirm:passRepeat});
+    $('#accountOld').value='';$('#accountNew').value='';$('#accountNewConfirm').value='';
+    accountNote(j.message);
+    if(!j.pending_email)setTimeout(()=>location.replace('/login'),1500);
+  }catch(err){accountNote(err.message,true)}
+};
+async function handleEmailVerification(){
+  const token=new URL(location.href).searchParams.get('email_token');
+  if(!token)return;
+  try{
+    if(!confirm('¿Confirmar el cambio al nuevo correo electrónico de Miura Panel?'))return;
+    const j=await api('confirm-email',{token});
+    accountNote(j.message);history.replaceState(null,'',location.pathname);
+    setTimeout(()=>location.replace('/login'),1500);
+  }catch(e){accountNote(e.message,true)}
+}
+$('#saveSession').onclick=async()=>{try{await api('session-hours',{hours:Number($('#sessionHours').value)});note('Caducidad configurada para futuras sesiones')}catch(e){note(e.message,true)}};
+$('#logoutAll').onclick=async()=>{if(!confirm('¿Cerrar todas las sesiones activas?'))return;try{await api('logout-all');location.replace('/login')}catch(e){note(e.message,true)}};
+async function saveSMTP(test){try{let j=await api('smtp',{host:$('#smtpHost').value,port:Number($('#smtpPort').value),tls:$('#smtpTls').value,username:$('#smtpUser').value,password:$('#smtpPassword').value,from:$('#smtpFrom').value,send_test:test});$('#smtpPassword').value='';note(test?'Correo de prueba enviado y SMTP guardado':'SMTP guardado');await load()}catch(e){note('SMTP: '+e.message,true)}}
+$('#smtpForm').onsubmit=e=>{e.preventDefault();saveSMTP(false)};
+$('#smtpTest').onclick=()=>saveSMTP(true);
+$('#smtpDisable').onclick=async()=>{if(!confirm('¿Desactivar recuperación SMTP?'))return;try{await api('smtp',{disable:true});await load();note('Recuperación SMTP desactivada')}catch(e){note(e.message,true)}};
+$('#verified').onchange=()=>$('#addTarget').disabled=!$('#verified').checked;
+let addingTarget=false;
+$('#addTarget').onclick=async()=>{if(addingTarget||!pendingScan||!$('#verified').checked)return;addingTarget=true;$('#addTarget').disabled=true;try{sshNote('Comprobando autorización SSH del destino…');await api('add',pendingScan);$('#fingerprintBlock').classList.add('hidden');pendingScan=null;await load();sshNote('Equipo SSH autorizado y añadido.')}catch(e){sshNote(e.message,true)}finally{addingTarget=false;$('#addTarget').disabled=!(pendingScan&&$('#verified').checked)}};
+// Este panel consume el progreso que escribe el servicio SSH independiente.
+// No estima el progreso de instalaciones remotas: muestra estados confirmados.
+let lastRunId=null, awaitingRun=false, initialRunId=null, launchAt=0;
+let localLaunch=false, localLaunchAt=0, localObservedActive=false, localOldVersion='';
+let polling=false,lastJobRenderSignature='',jobTimer=null,nextJobDelay=30000,expectVersionChange=false, previousHistorySignature='';
+function batchNotice(msg,kind='info'){
+  const e=$('#batchNotice');e.classList.remove('hidden','success','error');
+  if(kind==='ok')e.classList.add('success');else if(kind==='error')e.classList.add('error');
+  e.textContent=msg;
+}
+function clockTime(epoch){return epoch?new Date(epoch*1000).toLocaleTimeString('es-ES'):'—'}
+function elapsed(from,to){if(!from)return '—';let s=Math.max(0,Math.floor((to||Date.now()/1000)-from));let h=Math.floor(s/3600),m=Math.floor(s%3600/60);return h?`${h} h ${m} min`:m?`${m} min ${s%60} s`:`${s} s`}
+function statusInfo(row,mode,finished,failed){
+  const st=row.state||'queued';
+  if(st==='error')return ['Error','error'];
+  if(st==='checking')return ['Comprobando…','running'];
+  if(st==='updating')return ['Actualizando…','running'];
+  if(st==='verifying')return ['Verificando…','running'];
+  if(st==='updated')return mode==='check'?['Al día','ok']:['Actualizado / al día','ok'];
+  if(st==='pending')return mode==='check'?['Actualización disponible','running']:failed?['No ejecutado','waiting']:['Pendiente','waiting'];
+  return [failed||finished?'No ejecutado':'En espera','waiting'];
+}
+function progressOf(doc){
+  let rows=Array.isArray(doc.items)?doc.items:[],n=rows.length,local=doc.local||{};
+  const countChecked=rows.filter(r=>!['queued','checking'].includes(r.state)).length+(local.current?1:0);
+  const total=n+1;
+  if(doc.mode==='check')return {pct:doc.state==='done'?100:Math.min(99,Math.floor(100*countChecked/total)),done:countChecked,total};
+  const preflight=countChecked;
+  if(doc.phase==='checking'||doc.failed_phase==='checking'||!doc.phase)return {pct:Math.min(49,Math.floor(50*preflight/total)),done:preflight,total,phase:'Verificación previa'};
+  const completed=rows.filter(r=>r.state==='updated').length+(local.state==='updated'?1:0);
+  let pct=Math.floor(50+50*completed/total);
+  if(doc.state==='done')pct=100;
+  else pct=Math.min(99,pct);
+  return {pct,done:completed,total,phase:'Instalación y verificación'};
+}
+function jobMessage(doc){
+  if(doc.state==='running')return doc.mode==='check'?'Comprobación en curso':'Actualización en curso';
+  if(doc.state==='local_pending')return 'Los destinos han terminado. Esperando la actualización del principal…';
+  if(doc.state==='error')return 'Operación detenida por un error';
+  if(doc.state==='done')return doc.mode==='check'?'Comprobación finalizada':'Actualización finalizada';
+  return 'Sin operaciones';
+}
+function renderJob(doc){
+  if(!doc||doc.state==='idle'){return}
+  const sig=JSON.stringify([doc.run_id,doc.state,doc.phase,doc.finished,doc.message,doc.local,(doc.items||[]).map(x=>[x.host,x.state,x.current,x.latest,x.message]),(doc.events||[]).length]);
+  if(sig===lastJobRenderSignature)return;lastJobRenderSignature=sig;
+  $('#fleetProgress').classList.remove('hidden');
+  $('#jobRaw').textContent=JSON.stringify(doc,null,2);
+  let failed=doc.state==='error', finished=doc.state==='done',running=doc.state==='running'||doc.state==='local_pending';
+  let rows=Array.isArray(doc.items)?doc.items:[],local=doc.local||{},prog=progressOf(doc);
+  let displayTitle=jobMessage(doc);
+  $('#jobHeading').textContent=displayTitle;
+  $('#jobSubtitle').textContent=`${doc.mode==='check'?'Comprobación':'Actualización'} · inicio ${clockTime(doc.started)} · ${running?'transcurrido':'duración'} ${elapsed(doc.started,doc.finished)}`;
+  $('#progressPercent').textContent=prog.pct+' %';
+  $('#progressTrack').setAttribute('aria-valuenow',String(prog.pct));
+  const fill=$('#progressFill');fill.style.width=prog.pct+'%';fill.className=failed?'failed':finished?'complete':'';
+  $('#progressCount').textContent=(doc.mode==='check'?'Equipos comprobados: ':'Servidores completados: ')+prog.done+' de '+prog.total+(prog.phase?' · '+prog.phase:'');
+  const details=rows.map(r=>{
+    let [label,cl]=statusInfo(r,doc.mode,finished,failed);
+    let v=(r.current?'v'+r.current:'Versión pendiente')+(r.latest&&r.current!==r.latest?' → v'+r.latest:'');
+    return `<div class="job-row"><div class="job-row-meta"><div class="job-row-name">${esc(r.name||r.host||'Servidor')}</div><div class="job-row-detail">${esc(r.host||'')} · ${esc(v)}${r.message?'<div style="color:#ffc3c3">'+esc(r.message)+'</div>':''}</div></div><span class="job-pill ${cl}">${label}</span></div>`
+  });
+  const localState=failed&&local.state==='pending'?'No ejecutado':local.state==='updated'?'Al día':local.state==='updating'?'Actualizando…':local.state==='pending'?'Pendiente':'En espera';
+  const localCls=local.state==='updated'?'ok':local.state==='error'?'error':local.state==='updating'?'running':'waiting';
+  details.push(`<div class="job-row"><div class="job-row-meta"><div class="job-row-name">★ Este panel (principal)</div><div class="job-row-detail">${esc(local.current?'v'+local.current:'Pendiente de comprobar')}${local.latest&&local.current!==local.latest?' → v'+esc(local.latest):''} · Se actualiza el último</div></div><span class="job-pill ${localCls}">${localState}</span></div>`);
+  $('#jobRows').innerHTML=details.join('');
+  $('#jobEvents').innerHTML=(doc.events||[]).map(e=>`<li><span class="muted">${clockTime(e.at)}</span> ${e.name?'<strong>'+esc(e.name)+':</strong> ':''}${esc(e.text)}</li>`).join('')||'<li>No hay eventos.</li>';
+  if(!awaitingRun){
+    if(finished)batchNotice((doc.mode==='check'?'Comprobación':'Actualización')+' finalizada. '+prog.total+' servidores revisados.', 'ok');
+    else if(failed)batchNotice(doc.message||'Error durante el lote. Consulta el equipo afectado.','error');
+    else batchNotice(doc.message||displayTitle);
+  }
+}
+function renderHistory(history){
+  if(!Array.isArray(history))return;
+  let signature=JSON.stringify(history.map(h=>[h.run_id,h.state,h.finished]));
+  if(signature===previousHistorySignature)return;
+  previousHistorySignature=signature;
+  $('#jobHistory').innerHTML=history.length?history.map(h=>{
+    const rows=h.items||[],errors=rows.filter(x=>x.state==='error').length;
+    const done=rows.filter(x=>x.state==='updated').length;
+    const isFail=h.state==='error';
+    return `<div class="history-item"><strong>${esc(h.mode==='check'?'Comprobación':'Actualización')} · ${new Date(h.started*1000).toLocaleString('es-ES')}</strong> · <span style="color:${isFail?'#ffc3c3':'#a3f4ca'}">${isFail?'Error':'Finalizada'}</span><div>${done} equipos al día · ${errors} errores · duración ${elapsed(h.started,h.finished)}</div>${isFail?'<div>'+esc(h.message||'')+'</div>':''}</div>`;
+  }).join(''):'<p>Aún no hay operaciones registradas.</p>';
+}
+async function launch(mode){
+  if(mode==='update-all'&&!confirm('¿Actualizar secuencialmente todos los equipos pendientes y, al final, este panel?'))return;
+  if(mode==='update-local'&&!confirm('¿Actualizar solo este panel? Puede reiniciarse la web durante la instalación.'))return;
+  if(mode==='update-all'||mode==='update-local')expectVersionChange=true;
+  if(awaitingRun)return;
+  let btn=mode==='check'?'#checkAll':mode==='update-all'?'#updateAll':'#updateLocal';
+  $(btn).disabled=true;
+  if(mode==='update-local'){
+    localLaunch=true;localLaunchAt=Date.now();localObservedActive=false;
+    localOldVersion=state?.version||'';
+    batchNotice('Solicitando actualización local…');
+  }else{
+    try {const prev=await fetch('/api/admin/job',{cache:'no-store'});if(prev.ok){const value=await prev.json();lastRunId=value.job?.run_id||(value.job?.started?'legacy-'+value.job.started+'-'+(value.job.mode||'') :null)}} catch(e) {}
+    initialRunId=lastRunId;
+    awaitingRun=true;launchAt=Date.now();
+    $('#fleetProgress').classList.remove('hidden');
+    $('#jobHeading').textContent='Preparando operación…';
+    $('#jobSubtitle').textContent='Comunicando con el servicio de actualizaciones';
+    $('#progressCount').textContent='Esperando respuesta del servicio';
+    $('#progressPercent').textContent='0 %';
+    $('#progressFill').style.width='0%';
+    $('#jobRows').innerHTML='';
+    $('#jobEvents').innerHTML='';
+    batchNotice(mode==='check'?'Iniciando comprobación…':'Iniciando actualización…');
+  }
+  try{await api(mode);await job()}
+  catch(e){awaitingRun=false;localLaunch=false;batchNotice(e.message,'error')}
+  finally{await job()}
+}
+$('#checkAll').onclick=()=>launch('check');
+$('#updateAll').onclick=()=>launch('update-all');
+$('#updateLocal').onclick=()=>launch('update-local');
+const adminAccountTrigger=$('#adminAccountTrigger'),adminAccountMenu=$('#adminAccountMenu');
+function closeAdminAccount(){adminAccountMenu.hidden=true;adminAccountTrigger.setAttribute('aria-expanded','false')}
+adminAccountTrigger.addEventListener('click',()=>{const open=adminAccountMenu.hidden;adminAccountMenu.hidden=!open;adminAccountTrigger.setAttribute('aria-expanded',String(open))});
+document.addEventListener('click',e=>{if(!$('#adminAccountBar').contains(e.target))closeAdminAccount()});
+document.addEventListener('keydown',e=>{if(e.key==='Escape')closeAdminAccount()});
+$('#logout').onclick=async()=>{closeAdminAccount();try{await api('logout')}finally{location.replace('/login')}};
+async function job(){
+  if(polling)return;
+  polling=true;
+  try{
+    let r=await fetch('/api/admin/job',{cache:'no-store'});
+    if(r.status===401){$('#localState').textContent='Sesión caducada. Vuelve a iniciar sesión.';return}
+    if(!r.ok)throw Error('HTTP '+r.status);
+    let j=await r.json();let doc=j.job||{},unit=j.local||{};
+    const observedId=doc.run_id||(doc.started?'legacy-'+doc.started+'-'+(doc.mode||''):null);
+    if(observedId&&(!awaitingRun||observedId!==initialRunId)){
+      lastRunId=observedId;
+      awaitingRun=false;
+      renderJob(doc);
+    }else if(awaitingRun && Date.now()-launchAt>18000){
+      awaitingRun=false;
+      batchNotice('No se ha obtenido el nuevo lote. Comprueba el estado del servicio antes de repetir la operación.','error');
+    }
+    renderHistory(j.history||[]);
+    const active=unit.ActiveState||'desconocido',result=unit.Result||'desconocido';
+    $('#localState').textContent=active==='active'||active==='activating'?'Actualización local en ejecución…':`Actualización local: ${active} · último resultado: ${result}`;
+    if(localLaunch){
+      if(active==='active'||active==='activating')localObservedActive=true;
+      if(localObservedActive&&active==='inactive'&&result==='success'){
+        localLaunch=false;batchNotice('Actualización local finalizada. Comprueba la versión instalada.','ok');
+      }else if(active==='failed'||localObservedActive&&active==='inactive'&&result!=='success'){
+        localLaunch=false;batchNotice('La actualización local ha fallado: '+result,'error');
+      }else if(Date.now()-localLaunchAt>60000&&!localObservedActive){
+        localLaunch=false;batchNotice('No se ha podido confirmar el inicio de la actualización local. Comprueba su estado.','error');
+      }
+    }
+    const busy=awaitingRun||doc.state==='running'||doc.state==='local_pending'||localLaunch;
+    nextJobDelay=busy?2500:30000;
+    $('#checkAll').disabled=busy;
+    $('#updateAll').disabled=busy||!state?.principal;
+    $('#updateLocal').disabled=busy;
+  }catch(e){if(awaitingRun)batchNotice('No se ha podido consultar el progreso: '+e.message,'error')}
+  finally{polling=false;clearTimeout(jobTimer);jobTimer=setTimeout(job,nextJobDelay)}
+}
+load().then(()=>{handleEmailVerification();job()}).catch(e=>note(e.message,true));
+
+
+/* Operaciones delegadas al broker local del destino mediante SSH de huella conocida. */
+let remoteDockerJob=null,remoteDockerPoll=null,remoteDockerBusy=false,remoteDockerProbing=false;
+function remoteDockerSay(msg,bad=false){const e=$('#remoteDockerNotice');e.textContent=msg;e.style.borderColor=bad?'#d25252':'#4d9bea'}
+function remoteDockerTargets(){try{return JSON.parse($('#dockerRemoto').dataset.targets||'[]')}catch(_e){return []}}
+function remoteDockerStateLabel(state){return ({authorized:'Autorizado',not_authorized:'No autorizado',no_docker:'Sin Docker',unavailable:'No disponible',checking:'Comprobando…'})[state]||'Pendiente'}
+function renderRemoteDockerServer(t,i,doc={state:'checking',detail:'Pendiente de comprobación.'}){
+  const root=$('#remoteDockerServers');
+  let box=root.querySelector(`[data-docker-index="${i}"]`);
+  if(!box){box=document.createElement('div');box.className='remote-docker-server';box.dataset.dockerIndex=String(i);root.appendChild(box)}
+  box.replaceChildren();
+  const head=document.createElement('div');head.className='remote-docker-server-head';
+  const left=document.createElement('div'),name=document.createElement('strong'),meta=document.createElement('small');
+  name.textContent=t.name||t.host;meta.textContent=t.host+':'+t.port+' · SSH';left.append(name,meta);
+  const state=document.createElement('span');state.className='remote-docker-state '+(doc.state||'checking');state.textContent=remoteDockerStateLabel(doc.state||'checking');
+  head.append(left,state);box.append(head);
+  const detail=document.createElement('div');detail.className='remote-docker-detail';detail.textContent=doc.detail||'';box.append(detail);
+  const actions=document.createElement('div');actions.className='remote-docker-server-actions';
+  if(doc.state==='authorized'){
+    const manage=document.createElement('button');manage.type='button';manage.className='manage-docker gold';manage.textContent='Gestionar Docker';
+    manage.addEventListener('click',()=>{$('#remoteDockerTarget').value=String(i);remoteDockerQuery()});actions.append(manage);
+  }else if(doc.state==='not_authorized'){
+    const wrap=document.createElement('div');wrap.className='remote-docker-command';
+    const code=document.createElement('code');code.textContent=doc.command||'sudo miura-panel-fleet docker-enable';
+    const copy=document.createElement('button');copy.type='button';copy.textContent='Copiar';copy.addEventListener('click',async()=>{
+      try{await navigator.clipboard.writeText(code.textContent);copy.textContent='Copiado';setTimeout(()=>copy.textContent='Copiar',1500)}catch(_e){copy.textContent='Selecciona el comando'}
+    });wrap.append(code,copy);box.append(wrap);
+  }else if(doc.state==='unavailable'){
+    const retry=document.createElement('button');retry.type='button';retry.textContent='Reintentar';retry.addEventListener('click',()=>remoteDockerProbeOne(t,i));actions.append(retry);
+  }
+  if(actions.childNodes.length)box.append(actions);
+}
+async function remoteDockerProbeOne(t,i){
+  renderRemoteDockerServer(t,i,{state:'checking',detail:'Comprobando '+(t.name||t.host)+' mediante SSH…'});
+  try{
+    const d=await api('docker-remote',{host:t.host,port:t.port,op:'probe'});
+    renderRemoteDockerServer(t,i,d);
+  }catch(e){renderRemoteDockerServer(t,i,{state:'unavailable',detail:e.message||'No se ha podido contactar con el destino.'})}
+}
+async function remoteDockerProbeAll(){
+  if(remoteDockerProbing||!state?.principal)return;
+  remoteDockerProbing=true;$('#remoteDockerProbeAll').disabled=true;
+  const ts=remoteDockerTargets();
+  if(!ts.length){$('#remoteDockerServers').innerHTML='<p class="muted">No hay destinos SSH vinculados al principal.</p>';remoteDockerProbing=false;$('#remoteDockerProbeAll').disabled=false;return}
+  await Promise.allSettled(ts.map((t,i)=>remoteDockerProbeOne(t,i)));
+  remoteDockerProbing=false;$('#remoteDockerProbeAll').disabled=false;
+}
+function updateRemoteDockerTargets(j){
+  const card=$('#dockerRemoto');card.hidden=!j.principal;
+  const unavailable=document.getElementById('miura-docker-unavailable');
+  if(unavailable)unavailable.hidden=!!j.principal || location.pathname!=='/docker-ssh';
+  if(!j.principal)return;
+  const targets=j.targets||[],select=$('#remoteDockerTarget'),previous=select.value;
+  select.innerHTML='<option value="">Selecciona un destino SSH…</option>'+targets.map((t,i)=>`<option value="${i}">${esc(t.name)} · ${esc(t.host)}:${t.port}</option>`).join('');
+  if(previous && Number(previous)<targets.length)select.value=previous;
+  card.dataset.targets=JSON.stringify(targets);
+  const list=$('#remoteDockerServers');list.replaceChildren();
+  for(const [i,t] of targets.entries())renderRemoteDockerServer(t,i,{state:'checking',detail:'Pendiente de comprobación.'});
+  if(!targets.length)list.innerHTML='<p class="muted">No hay destinos SSH vinculados al principal.</p>';
+  if(location.pathname==='/docker-ssh'&&targets.length)setTimeout(remoteDockerProbeAll,120);
+}
+function remoteDockerSelected(){
+  const val=$('#remoteDockerTarget').value;
+  if(val==='' || !state?.principal)throw Error('Selecciona un servidor principal con un destino SSH autorizado');
+  const ts=remoteDockerTargets(),t=ts[Number(val)];
+  if(!t)throw Error('Destino SSH no válido');
+  return {host:t.host,port:t.port};
+}
+async function remoteDockerRpc(op,extra={}){return api('docker-remote',{...remoteDockerSelected(),op,...extra})}
+function remoteDockerButtons(active){$('#remoteDockerRefresh').disabled=active;remoteDockerBusy=active;}
+async function remoteDockerQuery(){
+  if(remoteDockerBusy)return;
+  clearTimeout(remoteDockerPoll);remoteDockerJob=null;
+  $('#remoteDockerRows').replaceChildren();
+  $('#remoteDockerUpdateAll').disabled=true;$('#remoteDockerDetails').hidden=true;
+  remoteDockerButtons(true);remoteDockerSay('Comprobando el broker Docker mediante SSH…');
+  try{
+    const d=await remoteDockerRpc('list');
+    const rows=d.containers||[],groups=d.groups||[];
+    const available=rows.some(x=>x.update&&x.actionable)||groups.some(x=>x.update&&x.actionable);
+    const bulkAvailable=rows.some(x=>x.update&&x.bulk_allowed);
+    $('#remoteDockerUpdateAll').disabled=!bulkAvailable;
+    const make=(entry,group=false)=>{
+      const box=document.createElement('div');box.className='remote-docker-row';
+      const name=document.createElement('strong');name.textContent=entry.name||entry.id||'Contenedor';box.appendChild(name);
+      const meta=document.createElement('small');meta.textContent='Instalada: '+(entry.installed||'N/D')+' · Última: '+(entry.latest||'N/D');box.appendChild(meta);
+      const button=document.createElement('button');button.type='button';
+      if(entry.update===true&&entry.actionable===true){
+        button.textContent=group?'Actualizar grupo':'Actualizar contenedor';
+        button.addEventListener('click',()=>remoteDockerStart(group?'update_group':'update_one',group?{group:'immich'}:{container:entry.name}));
+      }else{button.textContent=entry.update?'Revisión manual':'Sin actualización';button.disabled=true}
+      box.appendChild(button);return box;
+    };
+    const target=$('#remoteDockerRows');for(const g of groups)target.appendChild(make(g,true));for(const c of rows)target.appendChild(make(c));
+    remoteDockerSay(rows.length+' contenedores consultados. '+(available?'Hay actualizaciones compatibles.':'Sin actualizaciones automáticas permitidas.')+' Los stacks protegidos siguen en lectura.');
+  }catch(e){remoteDockerSay(e.message,true);$('#remoteDockerRows').replaceChildren()}
+  finally{remoteDockerButtons(false)}
+}
+async function remoteDockerStart(op,extra={}){
+  if(remoteDockerBusy)return;
+  const label=op==='update_all'?'TODOS los contenedores compatibles':op==='update_group'?'el grupo Immich':extra.container;
+  if(!confirm('¿Iniciar actualización Docker remota de '+label+'? Se usará el broker restringido del destino.'))return;
+  remoteDockerButtons(true);$('#remoteDockerUpdateAll').disabled=true;remoteDockerSay('Iniciando actualización por SSH…');
+  try{
+    const job=await remoteDockerRpc(op,{...extra,confirm:'ACTUALIZAR'});
+    if(!/^[0-9a-f]{12}$/.test(job.job_id||''))throw Error('No se recibió un identificador válido del trabajo');
+    remoteDockerJob=job.job_id;$('#remoteDockerDetails').hidden=false;$('#remoteDockerDetails').open=true;$('#remoteDockerLog').textContent='Trabajo iniciado: '+job.job_id;setTimeout(remoteDockerTrack,1200);
+  }catch(e){remoteDockerSay(e.message,true);remoteDockerButtons(false)}
+}
+async function remoteDockerTrack(){
+  if(!remoteDockerJob)return;
+  try{
+    const d=await remoteDockerRpc('status',{job_id:remoteDockerJob}),job=d.job||{};$('#remoteDockerLog').textContent=(job.log||[]).join('\n')||job.state||'Esperando resultados';
+    remoteDockerSay('Estado: '+(job.state||'N/D')+' · '+(job.done||0)+' / '+(job.total||'?'));
+    if(['done','error','finished','complete'].includes(job.state)){
+      const finished=job.state;remoteDockerJob=null;remoteDockerButtons(false);remoteDockerSay(finished==='error'?'Actualización con errores; consulta el registro.':'Trabajo finalizado. Consulta el registro y vuelve a comprobar Docker.',finished==='error');return;
+    }
+    remoteDockerPoll=setTimeout(remoteDockerTrack,1750);
+  }catch(e){remoteDockerJob=null;remoteDockerButtons(false);remoteDockerSay(e.message,true)}
+}
+$('#remoteDockerProbeAll').addEventListener('click',remoteDockerProbeAll);
+$('#remoteDockerRefresh').addEventListener('click',remoteDockerQuery);
+$('#remoteDockerUpdateAll').addEventListener('click',()=>remoteDockerStart('update_all'));
+$('#remoteDockerTarget').addEventListener('change',()=>{remoteDockerJob=null;clearTimeout(remoteDockerPoll);$('#remoteDockerRows').replaceChildren();$('#remoteDockerDetails').hidden=true;$('#remoteDockerUpdateAll').disabled=true;remoteDockerSay('Pulsa «Consultar Docker» para ver el estado del destino.');});
+
+// Ayuda contextual de secciones: no usa API, permisos ni datos de cuenta.
+document.querySelectorAll('.miura-question').forEach(button=>{
+  button.addEventListener('click',()=>{
+    const target=document.getElementById(button.getAttribute('aria-controls'));
+    if(!target)return;
+    const opening=target.hidden;
+    document.querySelectorAll('.miura-hint').forEach(el=>el.hidden=true);
+    document.querySelectorAll('.miura-question').forEach(el=>el.setAttribute('aria-expanded','false'));
+    target.hidden=!opening;
+    button.setAttribute('aria-expanded',String(opening));
+  });
+});
+
+if(location.pathname==='/docker-ssh'){
+  document.body.classList.add('miura-docker-view');
+  const heading=document.querySelector('.sep-admin-title');
+  // Se conserva el logotipo y el control de la cuenta, pero no se mezclan secciones.
+  for(const n of [...heading.childNodes])if(n.nodeType===Node.TEXT_NODE)n.textContent=' Miura Panel — Docker SSH';
+  document.title='Docker SSH · Miura Panel';
+}
+
+/* Sondeo independiente del trabajo de actualización (systemd): si Miura
+   se reinicia, esperamos que vuelva a servir la nueva versión antes de recargar. */
+(()=>{
+  const installedAtLoad='1.0.31';
+  let checking=false, refreshing=false;
+  async function checkReload(){
+    if(!expectVersionChange||checking||refreshing)return;
+    checking=true;
+    try{
+      const response=await fetch('/version.json?_='+Date.now(),{cache:'no-store',signal:AbortSignal.timeout(4500)});
+      if(!response.ok)return;
+      const v=String((await response.json()).version||'');
+      if(/^\d+\.\d+\.\d+$/.test(v)&&v!==installedAtLoad){
+        refreshing=true;
+        location.reload();
+      }
+    }catch(_e){/* Esperando reinicio; la operación no depende del navegador. */}
+    finally{checking=false}
+  }
+  setInterval(checkReload,4000);
+})();
+</script></body></html>

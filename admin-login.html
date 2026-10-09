@@ -1,0 +1,28 @@
+<!DOCTYPE html><html lang="es"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><link rel="icon" type="image/png" href="/assets/sep-logo.png"><title>Acceder a Miura Panel</title>
+<style>.sep-login-brand{display:flex;align-items:center;gap:14px;margin-bottom:18px}.sep-login-logo{display:block;width:72px;height:72px;object-fit:contain;flex:none}.sep-login-brand h1{margin:0}.guest-link{display:block;margin-top:16px;padding:11px 12px;border:1px solid #526a86;color:#d3e9ff;border-radius:8px;text-align:center;text-decoration:none;font-weight:700}.guest-link:hover{background:#24354b}.forgot-toggle{display:block;width:auto;margin:14px 0 0;padding:4px 0;border:0;background:none;color:#9acfff;text-align:left;text-decoration:underline;font-weight:650}.forgot-toggle:hover{color:white;background:transparent}.forgot-form{margin-top:14px;padding-top:12px;border-top:1px solid #38475b}.forgot-form[hidden]{display:none}.forgot-form button{margin-top:12px}.forgot-hint{font-size:13px;line-height:1.5;color:#a8bdd5}.forgot-message{color:#bdddfc;min-height:0;line-height:1.5}:root{color-scheme:dark}body{margin:0;min-height:100vh;background:#0b0f16;color:#e9f1ff;font:15px system-ui;display:grid;place-items:center}.card{width:min(400px,92vw);background:#141b27;border:1px solid #293b52;border-radius:16px;padding:26px}h1{font-size:21px;color:#ebcc82}label{display:block;margin-top:14px;font-weight:650}input{width:100%;padding:12px;box-sizing:border-box;margin-top:5px;background:#0b1422;color:white;border:1px solid #345;border-radius:8px}button{background:#1664ae;color:white;border:0;border-radius:8px;padding:12px;width:100%;margin-top:20px;font-weight:800;cursor:pointer}p{color:#a2b4c9}#error{color:#ff9a9a}</style></head>
+<body><main class="card"><div class="sep-login-brand"><img class="sep-login-logo" src="/assets/sep-logo.png" alt=""><h1>Miura Panel</h1></div><h2>Administración HTTPS</h2><p>Accede con las credenciales configuradas durante la activación.</p>
+<form id="login"><label for="usr">Usuario</label><input id="usr" autocomplete="username" required maxlength="32"><label for="pw">Contraseña</label><input id="pw" type="password" autocomplete="current-password" required><button>Entrar</button></form>
+<button id="forgotToggle" class="forgot-toggle" type="button" aria-expanded="false" aria-controls="forgotForm">¿Has olvidado tu contraseña?</button>
+<form id="forgotForm" class="forgot-form" hidden><label for="recoveryEmail">Correo electrónico de acceso</label><input id="recoveryEmail" type="email" maxlength="254" autocomplete="email" required><button id="forgotSend" type="submit">Enviar enlace de recuperación</button><p id="forgotMessage" class="forgot-message" role="status" aria-live="polite"></p><p class="forgot-hint">Requiere SMTP configurado. Sin correo de recuperación, usa <code>sudo miura-panel-admin-setup --recover</code> en la consola del servidor.</p></form>
+<a class="guest-link" href="/">Entrar como invitado · solo lectura</a><p id="error" role="alert"></p></main>
+<script>document.querySelector('#login').onsubmit=async e=>{e.preventDefault();let b=e.target.querySelector('button');b.disabled=true;const err=document.querySelector('#error');err.textContent='';try{let r=await fetch('/api/admin/login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({username:document.querySelector('#usr').value,password:document.querySelector('#pw').value})});let j=await r.json();if(!r.ok)throw Error(j.error||'Acceso denegado');location.replace(new URLSearchParams(location.search).get('next')==='/docker-ssh'?'/docker-ssh':'/')}catch(ex){err.textContent=ex.message}finally{b.disabled=false}}
+const forgotToggle=document.querySelector('#forgotToggle'),forgotForm=document.querySelector('#forgotForm');
+forgotToggle.addEventListener('click',()=>{
+  const show=forgotForm.hidden;
+  forgotForm.hidden=!show;
+  forgotToggle.setAttribute('aria-expanded',String(show));
+  if(show){document.querySelector('#recoveryEmail').focus();}
+});
+forgotForm.addEventListener('submit',async e=>{
+  e.preventDefault();
+  const b=document.querySelector('#forgotSend'),notice=document.querySelector('#forgotMessage');
+  b.disabled=true;notice.textContent='Solicitando recuperación…';
+  try{
+    const r=await fetch('/api/admin/forgot',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({email:document.querySelector('#recoveryEmail').value.trim()}),cache:'no-store'});
+    if(!r.ok)throw Error('No se ha podido tramitar la solicitud.');
+    // La API deliberadamente no indica si existe esa cuenta: evitar enumeración de usuarios.
+    notice.textContent='Si el correo corresponde a una cuenta con SMTP configurado, recibirás un enlace de recuperación.';
+  }catch(e){notice.textContent=e.message;}
+  finally{b.disabled=false;}
+});
+</script></body></html>
