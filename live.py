@@ -41,7 +41,9 @@ if MODE not in ("normal", "demo"):
     # panel on fictional data instead of exposing live host metrics.
     MODE = "demo"
 
-BIND_IP = _CONFIG.get("DASHBOARD_BIND_IP", "0.0.0.0")
+# The read-only HTTP service has no login. Keep it local unless an operator
+# explicitly configures a reachable address.
+BIND_IP = _CONFIG.get("DASHBOARD_BIND_IP", "127.0.0.1")
 try:
     PORT = int(_CONFIG.get("DASHBOARD_PORT", "8766"))
 except ValueError:

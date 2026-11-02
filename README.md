@@ -32,7 +32,7 @@ sudo ./install-spanish-empire-panel.sh --rollback
 
 `--upgrade` conserva `DASHBOARD_MODE` y el resto de `/etc/server-dashboard.conf`. Las copias anteriores se guardan bajo `/var/backups/server-dashboard/`. La configuración y el modo demo persisten aunque se actualice el código.
 
-Requisitos del destino: Debian o Ubuntu con systemd, `/usr/bin/python3` y el módulo del sistema `psutil` (`python3-psutil`). El instalador comprueba estos requisitos antes de cambiar el sistema; no descarga paquetes ni abre puertos de firewall. El panel HTTP de lectura se sirve en el puerto 8766, sujeto a la configuración local.
+Requisitos del destino: Debian o Ubuntu con systemd, `/usr/bin/python3` y el módulo del sistema `psutil` (`python3-psutil`). El instalador comprueba estos requisitos antes de cambiar el sistema; no descarga paquetes ni abre puertos de firewall. El panel HTTP de lectura se sirve en el puerto 8766 y, por defecto, solo acepta conexiones locales (`127.0.0.1`). En una actualización, el instalador conserva el resto de la configuración y cambia el antiguo valor comodín `DASHBOARD_BIND_IP=0.0.0.0` a loopback, porque el panel HTTP no requiere autenticación y muestra datos del servidor. Para permitir acceso desde otra interfaz, configura explícitamente una dirección adecuada y protege el acceso en la red.
 
 Para validar el instalador sin tocar el sistema anfitrión, define `MIURA_ROOT_PREFIX` con una ruta temporal. Ese modo instala archivos y unidades en la raíz indicada, pero no ejecuta systemd.
 

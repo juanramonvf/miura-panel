@@ -437,23 +437,40 @@ if [[ ! -f "$CONF" ]]; then
   cat > "$CONF" <<EOF
 # Miura Panel configuration. Updates preserve this file.
 DASHBOARD_MODE=$MODE
-DASHBOARD_BIND_IP=0.0.0.0
+DASHBOARD_BIND_IP=127.0.0.1
 DASHBOARD_PORT=8766
 DASHBOARD_SMART=1
 DASHBOARD_DOCKER_UPDATER=0
 EOF
   chmod 0640 "$CONF"
 fi
-if ((UPGRADE)) && [[ "$OLD_MODE" == __MISSING__ ]]; then
+if ((UPGRADE)); then
   CONF_MODIFIED=1
   python3 - "$CONF" <<'PY'
 import os, pathlib, stat, sys, tempfile
 path=pathlib.Path(sys.argv[1])
 original=path.read_bytes()
-if any(line.partition(b'=')[0].strip()==b'DASHBOARD_MODE' for line in original.splitlines()):
-    raise SystemExit('DASHBOARD_MODE apareció durante la migración; cancelo')
-separator=b'' if not original or original.endswith(b'\n') else b'\n'
-updated=original+separator+b'DASHBOARD_MODE=normal\n'
+lines=original.splitlines(keepends=True)
+mode_keys=[]; bind_keys=[]
+for index,line in enumerate(lines):
+    key, sep, value=line.strip().partition(b'=')
+    if sep and key.strip()==b'DASHBOARD_MODE': mode_keys.append(index)
+    if sep and key.strip()==b'DASHBOARD_BIND_IP': bind_keys.append(index)
+if len(mode_keys)>1 or len(bind_keys)>1:
+    raise SystemExit('La configuración tiene claves de modo o dirección duplicadas; cancelo')
+changed=False
+if not mode_keys:
+    lines.append((b'' if not original or original.endswith(b'\n') else b'\n')+b'DASHBOARD_MODE=normal\n')
+    changed=True
+if bind_keys:
+    index=bind_keys[0]
+    key, sep, value=lines[index].strip().partition(b'=')
+    if value.strip().strip(b'"').strip(b"'")==b'0.0.0.0':
+        ending=b'\n' if lines[index].endswith(b'\n') else b''
+        lines[index]=key+b'=127.0.0.1'+ending
+        changed=True
+updated=b''.join(lines)
+if not changed: raise SystemExit(0)
 st=path.stat()
 fd,tmp=tempfile.mkstemp(prefix=path.name+'.pending-', dir=path.parent)
 try:
