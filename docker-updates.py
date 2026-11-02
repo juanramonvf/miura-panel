@@ -519,6 +519,9 @@ def check_one(row):
 
 def main():
     global _immich_group
+    if load_dashboard_config().get("DASHBOARD_MODE", "normal").strip().lower() == "demo":
+        print("Docker: comprobación omitida en modo demo")
+        return
     rc, out, err = run([DOCKER_BIN, "ps", "-a", "--format", "{{json .}}"], 25)
     if rc != 0:
         raise SystemExit(err or "docker ps falló")
@@ -579,6 +582,9 @@ def main():
 
 
 if __name__ == "__main__":
+    if load_dashboard_config().get("DASHBOARD_MODE", "normal").strip().lower() == "demo":
+        print("Docker: comprobación omitida en modo demo")
+        sys.exit(0)
     lock_path = "/run/server-dashboard/docker-check.lock"
     os.makedirs(os.path.dirname(lock_path), exist_ok=True)
     with open(lock_path, "w", encoding="utf-8") as lock:

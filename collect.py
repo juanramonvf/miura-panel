@@ -50,6 +50,7 @@ def load_dashboard_config():
 
 
 _CONFIG = load_dashboard_config()
+MODE = _CONFIG.get("DASHBOARD_MODE", "normal").strip().lower()
 DASHBOARD_TITLE = _CONFIG.get("DASHBOARD_TITLE") or platform.node()
 DASHBOARD_CITY = _CONFIG.get("DASHBOARD_CITY", "")
 DASHBOARD_DOCKER_UPDATER = _CONFIG.get("DASHBOARD_DOCKER_UPDATER", "0") == "1"
@@ -692,6 +693,10 @@ def read_history():
 
 
 def main():
+    # Demo mode is served by synthetic HTTP fixtures in live.py. Do not inspect
+    # this machine or overwrite normal-mode data files while demo is selected.
+    if MODE == "demo":
+        return
     now = time.time()
     now_iso = dt.datetime.now().astimezone().isoformat(timespec="seconds")
     uptime_s = max(0, now - psutil.boot_time())

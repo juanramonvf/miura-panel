@@ -5,6 +5,9 @@
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <title>Miura Panel · Estado</title><link rel="icon" type="image/png" href="/assets/sep-logo.png">
 <style>
+.sep-demo-banner{display:none;margin:0 0 14px;padding:11px 14px;border:1px solid #9b762d;border-radius:10px;background:#302713;color:#ffe09a;font-weight:850;text-align:center;letter-spacing:.04em}
+.sep-demo-mode .sep-demo-banner{display:block}
+.sep-demo-mode #sepAdminLink,.sep-demo-mode .sep-update-actions,.sep-demo-mode .update-one,.sep-demo-mode .update-group,.sep-demo-mode #updateAllBtn,.sep-demo-mode .sep-disk-rename,.sep-demo-mode .sep-appconfigure{display:none!important}
 :root{color-scheme:dark;--bg:#0b0f16;--card:#141924;--line:#283245;--text:#f4f7fb;--muted:#98a5b8;--ok:#3fb950;--warn:#d29922;--bad:#f85149;--accent:#58a6ff;--title:#dce8ff}
 *{box-sizing:border-box}html,body{margin:0;min-width:0;background:var(--bg);color:var(--text);font:14px/1.45 system-ui,-apple-system,Segoe UI,Roboto,sans-serif}.wrap{width:min(1540px,100%);margin:auto;padding:18px}.head{margin-bottom:8px}.head h1{font-size:34px;margin:0;font-weight:900;letter-spacing:.2px}.small{color:var(--muted);font-size:12px}.grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px}.card{background:linear-gradient(180deg,#151b27,#121722);border:1px solid var(--line);border-radius:16px;padding:14px;min-width:0;box-shadow:0 8px 22px rgba(0,0,0,.22)}.metric{font-size:clamp(24px,2vw,34px);font-weight:900;margin:4px 0 1px}.label{color:var(--muted);font-size:12px;text-transform:uppercase;letter-spacing:.08em;font-weight:800}.bar{height:8px;background:#262b34;border-radius:99px;overflow:hidden;margin-top:9px}.fill{height:100%;background:var(--accent);border-radius:99px}.fill.warn{background:var(--warn)}.fill.bad{background:var(--bad)}.section{margin-top:14px}.section-title{display:flex;align-items:center;gap:10px;margin:0 0 10px}.section-title h2{font-size:22px;line-height:1.1;margin:0;color:var(--title);font-weight:900;letter-spacing:.02em}.section-title::before{content:"";display:inline-block;width:6px;height:24px;border-radius:99px;background:linear-gradient(180deg,var(--accent),#8bcbff)}.diskrow{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px}.mount{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.charts{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}.chart{height:190px;width:100%;display:block}.legend{display:flex;gap:12px;flex-wrap:wrap;color:var(--muted);font-size:12px}.table{width:100%;border-collapse:collapse}.table th,.table td{text-align:left;padding:8px 6px;border-bottom:1px solid var(--line);vertical-align:top}.table th{color:var(--muted);font-weight:700;text-transform:uppercase;letter-spacing:.06em;font-size:11px}.pill{display:inline-block;padding:2px 7px;border-radius:999px;font-size:10px;font-weight:900;letter-spacing:.04em;background:#252a33;white-space:nowrap}.pill.oktxt{color:#67d477;background:rgba(63,185,80,.13)}.pill.badtxt{color:#ff7b72;background:rgba(248,81,73,.13)}.pill.warntext{color:#e3b341;background:rgba(210,153,34,.16)}button.pill.warntext{border:0;cursor:pointer;font:inherit;font-size:10px;font-weight:900;letter-spacing:.04em}button.pill.warntext:hover{background:rgba(210,153,34,.28)}button.pill.warntext:disabled{opacity:.45;cursor:not-allowed}.pill.muted{color:#aab4c3}.containers{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px}.container{border:1px solid var(--line);border-radius:10px;padding:9px 10px;overflow:hidden;background:rgba(255,255,255,.01)}.container.update{border-color:rgba(210,153,34,.55);background:rgba(210,153,34,.07)}.container b{display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.container-head{display:flex;align-items:center;justify-content:space-between;gap:6px}.docker-actions{display:flex;gap:7px;align-items:center;flex-wrap:wrap}.btn{appearance:none;border:1px solid rgba(88,166,255,.45);background:rgba(88,166,255,.12);color:#9dcbff;border-radius:8px;padding:6px 9px;font:inherit;font-size:11px;font-weight:850;cursor:pointer}.btn:hover{background:rgba(88,166,255,.2)}.btn.warnbtn{border-color:rgba(210,153,34,.55);background:rgba(210,153,34,.14);color:#e3b341}.btn.warnbtn:hover{background:rgba(210,153,34,.23)}.btn:disabled{opacity:.45;cursor:not-allowed}.action-status{display:none;margin:8px 0 10px;padding:8px 10px;border:1px solid var(--line);background:#101621;border-radius:9px;font-size:12px}.action-status.show{display:block}.action-status.error{border-color:rgba(248,81,73,.5);color:#ff9b96}.action-status.done{border-color:rgba(63,185,80,.45);color:#7dde8b}.versions{display:grid;grid-template-columns:1fr;gap:1px;margin-top:6px;font-size:11px;color:var(--muted)}.versions strong{color:var(--text);font-weight:700}.top-alerts{display:none;margin:8px 0 13px;padding:8px 11px;border-radius:10px;border:1px solid rgba(210,153,34,.45);background:rgba(210,153,34,.16);color:#e3b341;font-size:12px;font-weight:700}.top-alerts.show{display:block}.top-alerts span+span::before{content:" · ";opacity:.75}.footer{margin:16px 0 2px;color:var(--muted);font-size:12px}.live-dot{display:inline-block;width:7px;height:7px;border-radius:50%;background:var(--ok);margin-right:6px;box-shadow:0 0 8px rgba(63,185,80,.65)}.disk-name{font-size:18px;font-weight:900;color:var(--title);margin-bottom:2px}.disk-dev{font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.06em}
 @media(max-width:1100px){.grid{grid-template-columns:repeat(2,minmax(0,1fr))}.charts{grid-template-columns:1fr}.containers{grid-template-columns:repeat(2,minmax(0,1fr))}.diskrow{grid-template-columns:repeat(3,minmax(0,1fr))}}
@@ -734,7 +737,7 @@
 @media(max-width:460px){.sep-brand-logo{width:43px!important;height:43px!important;flex-basis:43px!important}.miura-brand-title .sep-brand{font-size:11px!important}.sep-brand-help a{font-size:9px!important;padding:3px 7px!important}}
 </style>
 </head>
-<body><main class="wrap">
+<body><main class="wrap"><div class="sep-demo-banner" role="status">MODO DEMOSTRACIÓN · DATOS FICTICIOS · SOLO LECTURA</div>
 <div class="sep-brandline" aria-label="Nombre y versión del panel">
   <!-- El historial de versiones se abre desde el propio número de versión. -->
   <div class="sep-brand-center">
@@ -1829,6 +1832,14 @@ $('#updateAllBtn').addEventListener('click',()=>startDockerUpdate('update_all'))
     }
   }catch(_e){}
 })();
+</script>
+<script>
+fetch('/api/mode',{cache:'no-store'}).then(r=>r.ok?r.json():null).then(v=>{
+  if(v?.mode==='demo'){
+    document.body.classList.add('sep-demo-mode');
+    document.documentElement.dataset.mode='demo';
+  }
+}).catch(()=>{});
 </script>
 </body></html>
 
