@@ -743,7 +743,7 @@
   <div class="sep-brand-center">
     <img class="sep-brand-logo" src="/assets/sep-logo.png" alt="Miura Panel" width="42" height="42">
     <div class="sep-brand-stack">
-      <div class="miura-brand-title"><span class="sep-brand">Miura Panel</span><span class="sep-ver">v1.0.34</span></div>
+      <div class="miura-brand-title"><span class="sep-brand">Miura Panel</span><span class="sep-ver">v1.0.35</span></div>
       <div class="sep-brand-help"><a href="https://sep.mundopeke.es/ayuda.html" target="_blank" rel="noopener noreferrer" title="Manual completo de Miura Panel">? Ayuda</a><a href="https://sep.mundopeke.es/novedades.html" target="_blank" rel="noopener noreferrer" title="Historial de cambios">↻ Novedades</a></div>
     </div>
   </div>
@@ -1462,7 +1462,7 @@ async function checkPanelVersion(){
       btn.onclick=()=>launchPanelUpdateFromHeader(data.latest,btn);
     }else if(data.status==='ok'){
       btn.classList.add('current');
-      btn.textContent='✓ Miura Panel al día · v1.0.34';
+      btn.textContent='✓ Miura Panel al día · v1.0.35';
       btn.hidden=false;btn.disabled=true;btn.onclick=null;
     }else{
       btn.hidden=true;btn.disabled=false;btn.classList.remove('current');btn.onclick=null;
@@ -1794,7 +1794,7 @@ $('#updateAllBtn').addEventListener('click',()=>startDockerUpdate('update_all'))
 /* Detecta el reinicio de Miura Panel después de una actualización sin F5.
    Nunca solicita otra instalación ni interrumpe trabajos del servidor. */
 (()=>{
-  const installedAtLoad='1.0.34';
+  const installedAtLoad='1.0.35';
   let checking=false, refreshing=false;
   async function checkReload(){
     if(checking||refreshing)return;
