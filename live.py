@@ -34,9 +34,12 @@ def load_dashboard_config():
 
 
 _CONFIG = load_dashboard_config()
-MODE = _CONFIG.get("DASHBOARD_MODE", "normal").strip().lower()
+_RAW_MODE = _CONFIG.get("DASHBOARD_MODE")
+MODE = "normal" if _RAW_MODE is None else _RAW_MODE.strip().lower()
 if MODE not in ("normal", "demo"):
-    MODE = "normal"
+    # An explicit unknown mode is a configuration error: keep the read-only
+    # panel on fictional data instead of exposing live host metrics.
+    MODE = "demo"
 
 BIND_IP = _CONFIG.get("DASHBOARD_BIND_IP", "0.0.0.0")
 try:
