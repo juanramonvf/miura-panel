@@ -32,7 +32,7 @@ def local_version():
     except (OSError, ValueError, KeyError, TypeError) as exc:
         raise RuntimeError('No se puede identificar la versión local desde version.json') from exc
 MAX_MANIFEST = 65536
-MAX_INSTALLER = 2 * 1024 * 1024
+MAX_INSTALLER = 8 * 1024 * 1024
 
 
 def cfg_get(key):
