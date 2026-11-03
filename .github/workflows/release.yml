@@ -7,9 +7,17 @@ on:
   workflow_dispatch:
     inputs:
       release_tag:
-        description: "Existing immutable tag to recover from a workflow failure"
+        description: "Existing stable release tag"
         required: true
         type: string
+      recovery_mode:
+        description: "Publish a release, or recover Pages for an already-published release only"
+        required: true
+        type: choice
+        default: publish_release
+        options:
+          - publish_release
+          - publish_pages_only
 
 permissions:
   actions: read
@@ -18,11 +26,12 @@ permissions:
 
 jobs:
   validate:
+    if: github.event_name != 'workflow_dispatch' || inputs.recovery_mode != 'publish_pages_only'
     uses: ./.github/workflows/validate.yml
 
   recovery_guard:
     name: Verify recovery tag and package source
-    if: github.event_name == 'workflow_dispatch'
+    if: github.event_name == 'workflow_dispatch' && inputs.recovery_mode != 'publish_pages_only'
     runs-on: ubuntu-24.04
     permissions:
       contents: read
@@ -70,7 +79,8 @@ jobs:
     if: >-
       always() && needs.validate.result == 'success' &&
       ((github.event_name == 'push' && github.event.created == true) ||
-       (github.event_name == 'workflow_dispatch' && needs.recovery_guard.result == 'success'))
+       (github.event_name == 'workflow_dispatch' && inputs.recovery_mode == 'publish_release' &&
+        needs.recovery_guard.result == 'success'))
     runs-on: ubuntu-24.04
     environment: release-publishing
     permissions:
@@ -201,7 +211,7 @@ jobs:
           PY
           )" || exit 0
           if [[ -n "$release_id" ]]; then
-            gh api --repo "$GH_REPO" -X DELETE "repos/${GH_REPO}/releases/${release_id}"
+            gh api -X DELETE "repos/${GH_REPO}/releases/${release_id}"
             echo 'Removed only this run-owned draft; the tag was preserved.'
           fi
 
@@ -209,13 +219,45 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          immutable="$(gh api --repo "$GH_REPO" --paginate "repos/${GH_REPO}/releases?per_page=100" -H 'X-GitHub-Api-Version: 2026-03-10' --jq '.[] | select(.tag_name == env.MIURA_RELEASE_TAG) | .immutable')"
+          immutable="$(gh api --paginate "repos/${GH_REPO}/releases?per_page=100" -H 'X-GitHub-Api-Version: 2026-03-10' --jq '.[] | select(.tag_name == env.MIURA_RELEASE_TAG) | .immutable')"
           [[ "$immutable" == true ]] || { echo 'Published release is not immutable' >&2; exit 1; }
+
+  verify-pages-recovery:
+    name: Verify existing immutable release for Pages-only recovery
+    if: github.event_name == 'workflow_dispatch' && inputs.recovery_mode == 'publish_pages_only'
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+    env:
+      GH_REPO: juanramonvf/miura-panel
+      GITHUB_TOKEN: ${{ github.token }}
+      GITHUB_REPOSITORY: ${{ github.repository }}
+      RUN_REF: ${{ github.ref }}
+      MIURA_RELEASE_TAG: ${{ inputs.release_tag }}
+    steps:
+      - name: Checkout workflow source from main
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 1
+
+      - name: Confirm official repository and main branch
+        run: |
+          set -Eeuo pipefail
+          [[ "$GITHUB_REPOSITORY" == "$GH_REPO" ]] || { echo 'Pages recovery is restricted to the official repository' >&2; exit 1; }
+          [[ "$RUN_REF" == refs/heads/main ]] || { echo 'Pages recovery must be dispatched from main' >&2; exit 1; }
+
+      - name: Verify published immutable release and all asset SHA256 values
+        run: python3 scripts/release/verify_published_release.py "$GH_REPO" "$MIURA_RELEASE_TAG"
 
   publish-pages-manifest:
     name: Publish compatibility manifest to GitHub Pages
-    needs: publish
-    if: needs.publish.result == 'success'
+    needs: [publish, verify-pages-recovery]
+    if: >-
+      always() &&
+      ((github.event_name == 'push' && needs.publish.result == 'success') ||
+       (github.event_name == 'workflow_dispatch' && inputs.recovery_mode == 'publish_pages_only' &&
+        needs.verify-pages-recovery.result == 'success'))
     runs-on: ubuntu-24.04
     concurrency:
       group: miura-pages-stable-manifest
@@ -230,12 +272,6 @@ jobs:
     env:
       GH_REPO: juanramonvf/miura-panel
     steps:
-      - name: Download tested package
-        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
-        with:
-          name: miura-release-package
-          path: release-assets
-
       - name: Configure GitHub Pages
         uses: actions/configure-pages@4bfa242aa49c5f7c6770b98670d354a7dfac05f8 # v5
 
