@@ -47,7 +47,7 @@ jobs:
           }
 
       - name: Test checked-in candidate artifacts
-        if: github.ref == 'refs/heads/development/v1.0.35-candidate'
+        if: contains(fromJSON('["refs/heads/development/v1.0.35-candidate","refs/heads/development/v1.0.36-candidate"]'), github.ref)
         run: python -m unittest discover -s tests -v
 
       - name: Build and exercise package for this version

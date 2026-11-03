@@ -43,9 +43,11 @@ class ReleaseArtifactTests(unittest.TestCase):
             DIST / f"install-spanish-empire-panel-v{cls.version}.sh",
         )).resolve()
         cls.installer_sha = pathlib.Path(str(cls.installer) + ".sha256")
+        versioned_example = DIST / f"miura-panel-update-manifest.v{cls.version}.example.json"
+        default_example = versioned_example if versioned_example.is_file() else DIST / "miura-panel-update-manifest.example.json"
         cls.manifest = pathlib.Path(os.environ.get(
             "MIURA_MANIFEST_PATH",
-            DIST / "miura-panel-update-manifest.example.json",
+            default_example,
         )).resolve()
         cls.manifest_sha = pathlib.Path(str(cls.manifest) + ".sha256")
         cls.check_example_manifest = "MIURA_MANIFEST_PATH" not in os.environ
@@ -92,9 +94,12 @@ class ReleaseArtifactTests(unittest.TestCase):
         self.assertRegex(manifest["installer"], r"^https://")
         self.assertRegex(manifest["sha256"], r"^[0-9a-f]{64}$")
         if self.check_example_manifest:
-            # The checked-in sample is branch-specific. Release builds pass
-            # MIURA_MANIFEST_PATH and use the generated, version-specific feed.
-            self.assertIn("development/v1.0.35-candidate", manifest["installer"])
+            # Prefer a version-specific sample while preserving the generic
+            # v1.0.35 sample for checkouts that have not prepared a new release.
+            self.assertIn(f"development/v{self.version}-candidate", manifest["installer"])
+            self.assertTrue(manifest["installer"].endswith(
+                f"install-spanish-empire-panel-v{self.version}.sh"
+            ))
 
         # Exercise the actual updater shipped in stable v1.0.34, including
         # its config parser, while replacing the only network read.
