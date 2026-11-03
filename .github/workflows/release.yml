@@ -1,0 +1,303 @@
+name: Miura immutable release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  actions: read
+  contents: read
+  security-events: write
+
+jobs:
+  validate:
+    uses: ./.github/workflows/validate.yml
+
+  publish:
+    name: Publish immutable GitHub Release
+    needs: validate
+    if: github.event.created == true
+    runs-on: ubuntu-24.04
+    environment: release-publishing
+    permissions:
+      contents: write
+    steps:
+      - name: Fetch validated public tag without credentials
+        run: git clone --depth 1 --branch "$GITHUB_REF_NAME" https://github.com/juanramonvf/miura-panel.git release-source
+
+      - name: Check release immutability and reject existing releases
+        env:
+          GITHUB_REPOSITORY: ${{ github.repository }}
+          GITHUB_TOKEN: ${{ github.token }}
+          IMMUTABILITY_CHECK_TOKEN: ${{ secrets.IMMUTABILITY_CHECK_TOKEN }}
+          MIURA_RELEASE_TAG: ${{ github.ref_name }}
+        run: python3 release-source/scripts/release/preflight_github_release.py
+
+      - name: Download tested package
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: miura-release-package
+          path: release-assets
+
+      - name: Verify uploaded package hashes
+        working-directory: release-assets
+        run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+          sha256sum -c "install-spanish-empire-panel-v${VERSION}.sh.sha256"
+          sha256sum -c miura-panel-update-manifest.json.sha256
+
+      - name: Create draft with all assets
+        id: create-draft
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+          cp release-assets/RELEASE_NOTES.md release-assets/PUBLISH_NOTES.md
+          printf '\n<!-- miura-release-run:%s -->\n' "$GITHUB_RUN_ID" >> release-assets/PUBLISH_NOTES.md
+          gh release create "$GITHUB_REF_NAME" \
+            "release-assets/install-spanish-empire-panel-v${VERSION}.sh" \
+            "release-assets/install-spanish-empire-panel-v${VERSION}.sh.sha256" \
+            release-assets/miura-panel-update-manifest.json \
+            release-assets/miura-panel-update-manifest.json.sha256 \
+            release-assets/RELEASE_NOTES.md \
+            --verify-tag --draft --title "Miura Panel $GITHUB_REF_NAME" \
+            --notes-file release-assets/PUBLISH_NOTES.md
+
+      - name: Verify complete draft assets before publishing
+        env:
+          GITHUB_REPOSITORY: ${{ github.repository }}
+          GITHUB_TOKEN: ${{ github.token }}
+          MIURA_RELEASE_TAG: ${{ github.ref_name }}
+        run: |
+          python3 - <<'PY'
+          import hashlib, json, os, pathlib, urllib.request
+          repo=os.environ['GITHUB_REPOSITORY']; tag=os.environ['MIURA_RELEASE_TAG']
+          token=os.environ['GITHUB_TOKEN']; root=pathlib.Path('release-assets')
+          version=tag[1:]
+          expected={
+              f'install-spanish-empire-panel-v{version}.sh',
+              f'install-spanish-empire-panel-v{version}.sh.sha256',
+              'miura-panel-update-manifest.json',
+              'miura-panel-update-manifest.json.sha256',
+              'RELEASE_NOTES.md',
+          }
+          base=f'https://api.github.com/repos/{repo}/releases'
+          release=None; page=1
+          while page<=10000:
+              req=urllib.request.Request(f'{base}?per_page=100&page={page}',headers={
+                  'Accept':'application/vnd.github+json','Authorization':'Bearer '+token,
+                  'X-GitHub-Api-Version':'2026-03-10','User-Agent':'miura-panel-release-check'})
+              with urllib.request.urlopen(req,timeout=20) as response:
+                  releases=json.loads(response.read(4*1024*1024).decode())
+              if not isinstance(releases,list): raise SystemExit('Release listing API response is invalid')
+              release=next((item for item in releases if item.get('tag_name')==tag),None)
+              if release is not None or len(releases)<100: break
+              page+=1
+          if page>10000: raise SystemExit('Release listing exceeded pagination safety limit')
+          if release is None: raise SystemExit('Created draft is not visible with GITHUB_TOKEN')
+          if release.get('draft') is not True: raise SystemExit('Expected an unpublished draft release')
+          if f'<!-- miura-release-run:{os.environ["GITHUB_RUN_ID"]} -->' not in release.get('body',''):
+              raise SystemExit('Draft release is not owned by this workflow run')
+          assets=release.get('assets',[])
+          if {asset.get('name') for asset in assets} != expected:
+              raise SystemExit('Draft assets do not exactly match the approved package file set')
+          for asset in assets:
+              path=root/asset['name']
+              if not path.is_file() or asset.get('state')!='uploaded' or asset.get('size')!=path.stat().st_size:
+                  raise SystemExit('Uploaded asset size/state mismatch: '+asset['name'])
+              digest=hashlib.sha256(path.read_bytes()).hexdigest()
+              api_digest=asset.get('digest')
+              if not isinstance(api_digest,str) or api_digest != 'sha256:'+digest:
+                  raise SystemExit('Uploaded asset digest mismatch: '+asset['name'])
+          print('Draft asset names, upload state, sizes, and available API digests verified')
+          PY
+
+      - name: Publish release
+        id: publish-release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release edit "$GITHUB_REF_NAME" --draft=false
+
+      - name: Remove only this run's unpublished draft after failure
+        if: always() && steps.create-draft.outcome != 'skipped' && steps.publish-release.outcome != 'success'
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+        run: |
+          release_id="$(python3 - <<'PY'
+          import json,os,urllib.request
+          repo=os.environ['GITHUB_REPOSITORY']; tag=os.environ['GITHUB_REF_NAME']; token=os.environ['GH_TOKEN']
+          base=f'https://api.github.com/repos/{repo}/releases'; page=1
+          while page<=10000:
+              req=urllib.request.Request(f'{base}?per_page=100&page={page}',headers={
+                  'Accept':'application/vnd.github+json','Authorization':'Bearer '+token,
+                  'X-GitHub-Api-Version':'2026-03-10','User-Agent':'miura-panel-release-cleanup'})
+              with urllib.request.urlopen(req,timeout=20) as response: releases=json.loads(response.read(4*1024*1024).decode())
+              release=next((item for item in releases if item.get('tag_name')==tag),None)
+              if release:
+                  marker=f'<!-- miura-release-run:{os.environ["GITHUB_RUN_ID"]} -->'
+                  if release.get('draft') and marker in release.get('body',''):
+                      print(release['id'])
+                  break
+              if len(releases)<100: break
+              page+=1
+          PY
+          )" || exit 0
+          if [[ -n "$release_id" ]]; then
+            gh api -X DELETE "repos/${GITHUB_REPOSITORY}/releases/${release_id}"
+            echo 'Removed only this run-owned draft; the tag was preserved.'
+          fi
+
+      - name: Verify published release is immutable
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          immutable="$(gh api --paginate "repos/${GITHUB_REPOSITORY}/releases?per_page=100" -H 'X-GitHub-Api-Version: 2026-03-10' --jq '.[] | select(.tag_name == env.GITHUB_REF_NAME) | .immutable')"
+          [[ "$immutable" == true ]] || { echo 'Published release is not immutable' >&2; exit 1; }
+
+  publish-pages-manifest:
+    name: Publish compatibility manifest to GitHub Pages
+    needs: publish
+    if: needs.publish.result == 'success'
+    runs-on: ubuntu-24.04
+    concurrency:
+      group: miura-pages-stable-manifest
+      cancel-in-progress: false
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    permissions:
+      contents: read
+      pages: write
+      id-token: write
+    steps:
+      - name: Download tested package
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: miura-release-package
+          path: release-assets
+
+      - name: Configure GitHub Pages
+        uses: actions/configure-pages@4bfa242aa49c5f7c6770b98670d354a7dfac05f8 # v5
+
+      - name: Build non-downgrading stable and immutable version manifests
+        env:
+          GITHUB_REPOSITORY: ${{ github.repository }}
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          python3 - <<'PY'
+          import hashlib, json, os, pathlib, re, urllib.error, urllib.request
+          repo=os.environ['GITHUB_REPOSITORY']; token=os.environ['GH_TOKEN']
+          base='https://api.github.com/repos/'+repo
+          headers={'Accept':'application/vnd.github+json','Authorization':'Bearer '+token,
+                   'X-GitHub-Api-Version':'2026-03-10','User-Agent':'miura-panel-pages-manifest'}
+          releases=[]; url=base+'/releases?per_page=100'
+          while url:
+              req=urllib.request.Request(url,headers=headers)
+              with urllib.request.urlopen(req,timeout=30) as response:
+                  chunk=json.loads(response.read(4*1024*1024).decode())
+                  link=response.headers.get('Link','')
+              releases.extend(chunk)
+              url=None
+              for item in link.split(','):
+                  if 'rel="next"' in item:
+                      url=item[item.find('<')+1:item.find('>')]
+                      break
+          semver=re.compile(r'^v(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$')
+          candidates=[]
+          for release in releases:
+              match=semver.fullmatch(release.get('tag_name',''))
+              if release.get('draft') or release.get('prerelease') or not match: continue
+              asset=next((a for a in release.get('assets',[]) if a.get('name')=='miura-panel-update-manifest.json'),None)
+              if asset:
+                  if release.get('immutable') is not True:
+                      raise SystemExit('Refusing to distribute a manifest from a mutable release: '+release['tag_name'])
+                  candidates.append((tuple(map(int,match.groups())),release,asset))
+          if not candidates: raise SystemExit('No published release contains a compatibility manifest')
+          out=pathlib.Path(os.environ['RUNNER_TEMP'])/'miura-pages'/'updates'
+          out.mkdir(parents=True,exist_ok=True)
+          manifests=[]; existing_versioned=set()
+          for version_tuple,release,asset in sorted(candidates):
+              by_name={item.get('name'):item for item in release.get('assets',[])}
+              installer_asset=by_name.get(f"install-spanish-empire-panel-v{'.'.join(map(str,version_tuple))}.sh")
+              if not installer_asset: raise SystemExit('Release is missing installer asset for '+release['tag_name'])
+              version='.'.join(map(str,version_tuple))
+              if installer_asset.get('size',0)>2*1024*1024:
+                  raise SystemExit('Installer asset exceeds the v1.0.34 compatibility limit: '+release['tag_name'])
+              req=urllib.request.Request(asset['browser_download_url'],headers={'User-Agent':'miura-panel-pages-manifest'})
+              with urllib.request.urlopen(req,timeout=30) as response: raw=response.read(65537)
+              if len(raw)>65536: raise SystemExit('Release manifest exceeds 64 KiB: '+release['tag_name'])
+              info=json.loads(raw.decode('utf-8'))
+              if info.get('version')!=version or info.get('installer')!=installer_asset.get('browser_download_url') or not re.fullmatch(r'[0-9a-f]{64}',str(info.get('sha256',''))):
+                  raise SystemExit('Invalid version or SHA256 in manifest for '+release['tag_name'])
+              manifest_digest=hashlib.sha256(raw).hexdigest()
+              if asset.get('digest') and asset['digest']!='sha256:'+manifest_digest:
+                  raise SystemExit('Manifest asset digest mismatch for '+release['tag_name'])
+              installer_api_digest=installer_asset.get('digest')
+              if installer_api_digest:
+                  if installer_api_digest!='sha256:'+info['sha256']:
+                      raise SystemExit('Manifest installer SHA256 differs from release asset digest for '+release['tag_name'])
+              else:
+                  req=urllib.request.Request(installer_asset['browser_download_url'],headers={'User-Agent':'miura-panel-pages-manifest'})
+                  with urllib.request.urlopen(req,timeout=30) as response: installer_bytes=response.read(2*1024*1024+1)
+                  if len(installer_bytes)>2*1024*1024 or hashlib.sha256(installer_bytes).hexdigest()!=info['sha256']:
+                      raise SystemExit('Downloaded installer size/SHA256 mismatch for '+release['tag_name'])
+              dest=out/f'v{version}.json'
+              version_url='https://juanramonvf.github.io/miura-panel/updates/'+dest.name
+              try:
+                  req=urllib.request.Request(version_url,headers={'User-Agent':'miura-panel-pages-manifest'})
+                  with urllib.request.urlopen(req,timeout=20) as response: existing_version=response.read(65537)
+                  if len(existing_version)>65536 or existing_version!=raw:
+                      raise SystemExit('Refusing to replace a versioned immutable manifest: '+dest.name)
+                  existing_versioned.add(version)
+              except urllib.error.HTTPError as exc:
+                  if exc.code!=404: raise SystemExit(f'Cannot safely read existing {dest.name} (HTTP {exc.code})')
+              except SystemExit:
+                  raise
+              except Exception as exc:
+                  raise SystemExit('Cannot safely read existing '+dest.name+': '+str(exc))
+              dest.write_bytes(raw)
+              digest=hashlib.sha256(raw).hexdigest()
+              (out/(dest.name+'.sha256')).write_text(f'{digest}  {dest.name}\n',encoding='ascii')
+              manifests.append((version_tuple,raw))
+          stable_url='https://juanramonvf.github.io/miura-panel/updates/stable.json'
+          try:
+              req=urllib.request.Request(stable_url,headers={'User-Agent':'miura-panel-pages-manifest'})
+              with urllib.request.urlopen(req,timeout=20) as response: old_raw=response.read(65537)
+              if len(old_raw)>65536: raise SystemExit('Current Pages stable manifest exceeds 64 KiB')
+              old=json.loads(old_raw.decode('utf-8'))
+          except urllib.error.HTTPError as exc:
+              if exc.code!=404:
+                  raise SystemExit(f'Cannot safely read current Pages stable manifest (HTTP {exc.code})')
+              if existing_versioned:
+                  raise SystemExit('Pages stable manifest is missing even though versioned manifests exist')
+              old_raw=None; old=None
+          except Exception as exc:
+              raise SystemExit('Cannot safely read current Pages stable manifest: '+str(exc))
+          if old is not None:
+              old_match=re.fullmatch(r'(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)',str(old.get('version','')))
+              if not old_match: raise SystemExit('Current Pages stable manifest has invalid version')
+              old_version=tuple(map(int,old_match.groups()))
+              if old_version>manifests[-1][0]: raise SystemExit('Refusing to downgrade Pages stable manifest')
+              if old_version==manifests[-1][0] and old_raw!=manifests[-1][1]:
+                  raise SystemExit('Current Pages stable manifest differs for the same release version')
+          stable=out/'stable.json'; stable.write_bytes(manifests[-1][1])
+          stable_digest=hashlib.sha256(stable.read_bytes()).hexdigest()
+          (out/'stable.json.sha256').write_text(f'{stable_digest}  stable.json\n',encoding='ascii')
+          (out.parent/'index.html').write_text('<!doctype html><html lang="en"><meta charset="utf-8"><title>Miura Panel update feeds</title><h1>Miura Panel update feeds</h1><p>Stable update manifest: <a href="updates/stable.json">updates/stable.json</a>.</p><p>Versioned manifests are immutable snapshots for each published GitHub Release.</p></html>\n',encoding='utf-8')
+          print('Prepared Pages stable.json at highest published semver', '.'.join(map(str,manifests[-1][0])))
+          PY
+          find "$RUNNER_TEMP/miura-pages" -type f -name '*.sha256' -print0 | while IFS= read -r -d '' sum; do
+            (cd "$(dirname "$sum")" && sha256sum -c "$(basename "$sum")")
+          done
+
+      - name: Upload Pages artifact
+        uses: actions/upload-pages-artifact@56afc609e74202658d3ffba0e8f6dda462b719fa # v3
+        with:
+          path: ${{ runner.temp }}/miura-pages
+
+      - name: Deploy Pages
+        id: deployment
+        uses: actions/deploy-pages@d6db90164ac5ed86f2b6aed7e0febac5b3c0c03e # v4

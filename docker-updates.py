@@ -35,6 +35,14 @@ def load_dashboard_config():
     return config
 
 
+def demo_mode():
+    config = load_dashboard_config()
+    raw = config.get("DASHBOARD_MODE")
+    # Keep compatibility when older installations have no mode key. Any
+    # explicit value other than normal is treated as demo and skips host reads.
+    return raw is not None and raw.strip().lower() != "normal"
+
+
 def configured_compose_roots():
     raw = load_dashboard_config().get("DASHBOARD_COMPOSE_ROOTS", "/srv")
     roots = []
@@ -519,6 +527,9 @@ def check_one(row):
 
 def main():
     global _immich_group
+    if demo_mode():
+        print("Docker: comprobación omitida en modo demo")
+        return
     rc, out, err = run([DOCKER_BIN, "ps", "-a", "--format", "{{json .}}"], 25)
     if rc != 0:
         raise SystemExit(err or "docker ps falló")
@@ -579,6 +590,9 @@ def main():
 
 
 if __name__ == "__main__":
+    if demo_mode():
+        print("Docker: comprobación omitida en modo demo")
+        sys.exit(0)
     lock_path = "/run/server-dashboard/docker-check.lock"
     os.makedirs(os.path.dirname(lock_path), exist_ok=True)
     with open(lock_path, "w", encoding="utf-8") as lock:

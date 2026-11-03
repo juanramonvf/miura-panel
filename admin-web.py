@@ -52,6 +52,20 @@ SETTINGS=ROOT/'settings.json'
 PREF=Path('/var/lib/server-dashboard/preferences/ui.json')
 ROLE=WEB/'fleet-role.json'
 
+
+def dashboard_mode(config_path=CONFIG):
+    """Read the current mode on every request so a stale service fails closed."""
+    try:
+        for raw in config_path.read_text(encoding='utf-8').splitlines():
+            key, sep, value = raw.strip().partition('=')
+            if sep and key.strip() == 'DASHBOARD_MODE':
+                mode=value.strip().strip('"').strip("'").lower()
+                return mode if mode in ('normal','demo') else 'demo'
+    except (OSError,UnicodeError):
+        # If the authoritative mode file disappears, do not expose admin state.
+        return 'demo'
+    return 'normal'
+
 config=json.loads(CONF.read_text(encoding='utf-8'))
 web_conf=live.load_dashboard_config()
 BIND=web_conf.get('DASHBOARD_BIND_IP','127.0.0.1')
@@ -235,6 +249,13 @@ def sudo_exact(*args):
 
 
 class Handler(live.Handler):
+    def _demo_blocked(self):
+        if dashboard_mode() != 'demo':
+            return False
+        self.close_connection=True
+        self.send_json(404,{'ok':False,'error':'No disponible en modo demo'})
+        return True
+
     def end_headers(self):
         self.send_header('Strict-Transport-Security','max-age=86400')
         self.send_header('Referrer-Policy','no-referrer')
@@ -307,6 +328,7 @@ class Handler(live.Handler):
         return bool(c.get('sep_guest') and c['sep_guest'].value=='1')
 
     def do_GET(self):
+        if self._demo_blocked():return
         path=self.path.split('?',1)[0]
         token,s=self._session()
         if path=='/login':
@@ -397,6 +419,7 @@ class Handler(live.Handler):
         return super().do_GET()
 
     def do_POST(self):
+        if self._demo_blocked():return
         path=self.path.split('?',1)[0]
         if path=='/api/admin/forgot':
             if not allowed_origin(self.headers):return self.send_json(403,{'ok':False,'error':'Origen rechazado'})
@@ -702,6 +725,10 @@ class Handler(live.Handler):
             self.send_json(200,{'ok':True,**result})
         except (ValueError,KeyError,AssertionError,subprocess.TimeoutExpired,subprocess.CalledProcessError,OSError,smtplib.SMTPException) as e:
             self.send_json(400,{'ok':False,'error':str(e)[:500]})
+
+    def do_HEAD(self):
+        if self._demo_blocked():return
+        return super().do_HEAD()
 
 
 if __name__=='__main__':

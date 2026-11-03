@@ -1,0 +1,95 @@
+name: Miura validation
+
+on:
+  workflow_call:
+    inputs: {}
+
+permissions:
+  actions: read
+  contents: read
+  security-events: write
+
+jobs:
+  tests-and-package:
+    name: Tests, package, SHA256, payload, demo
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Python
+        uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
+        with:
+          python-version: "3.12"
+
+      - name: Compile Python and check shell syntax
+        run: |
+          python -m compileall -q .
+          for file in ./*.sh; do bash -n "$file"; done
+
+      - name: Validate release tag source when running on a tag
+        if: github.ref_type == 'tag'
+        env:
+          EVENT_CREATED: ${{ github.event.created }}
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: |
+          set -Eeuo pipefail
+          [[ "$EVENT_CREATED" == true ]] || { echo 'A release workflow only accepts a newly created tag' >&2; exit 1; }
+          [[ "$RELEASE_TAG" =~ ^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$ ]] || { echo 'Invalid stable semver tag' >&2; exit 1; }
+          VERSION="$(python -c 'import json; print(json.load(open("version.json"))["version"])')"
+          [[ "$RELEASE_TAG" == "v$VERSION" ]] || { echo "Tag $RELEASE_TAG and version.json $VERSION differ" >&2; exit 1; }
+          git fetch --no-tags origin main
+          git merge-base --is-ancestor "$GITHUB_SHA" refs/remotes/origin/main || {
+            echo 'Release tag is not reachable from origin/main; candidate-only commits cannot publish' >&2
+            exit 1
+          }
+
+      - name: Test checked-in candidate artifacts
+        if: github.ref == 'refs/heads/development/v1.0.35-candidate'
+        run: python -m unittest discover -s tests -v
+
+      - name: Build and exercise package for this version
+        env:
+          MIURA_RELEASE_VERSION: ${{ github.ref_type == 'tag' && github.ref_name || '' }}
+        run: |
+          VERSION="${MIURA_RELEASE_VERSION#v}"
+          if [[ -z "$VERSION" ]]; then VERSION="$(python -c 'import json; print(json.load(open("version.json"))["version"])')"; fi
+          mkdir -p "$RUNNER_TEMP/miura-release-package"
+          python scripts/release/package_release.py "$VERSION" "$RUNNER_TEMP/miura-release-package"
+
+      - name: Test generated package with release gates
+        env:
+          MIURA_RELEASE_VERSION: ${{ github.ref_type == 'tag' && github.ref_name || '' }}
+        run: |
+          VERSION="${MIURA_RELEASE_VERSION#v}"
+          if [[ -z "$VERSION" ]]; then VERSION="$(python -c 'import json; print(json.load(open("version.json"))["version"])')"; fi
+          export MIURA_INSTALLER_PATH="$RUNNER_TEMP/miura-release-package/install-spanish-empire-panel-v${VERSION}.sh"
+          export MIURA_MANIFEST_PATH="$RUNNER_TEMP/miura-release-package/miura-panel-update-manifest.json"
+          python -m unittest discover -s tests -v
+
+      - name: Upload validated release package
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: miura-release-package
+          path: ${{ runner.temp }}/miura-release-package/
+          if-no-files-found: error
+          overwrite: true
+          retention-days: 2
+
+  codeql:
+    name: CodeQL security audit
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+
+      - name: Initialize CodeQL
+        uses: github/codeql-action/init@5c8ea125689a2c5ae2672d1d914ac4bcd95d1b4b # v3
+        with:
+          languages: python
+          queries: security-extended
+
+      - name: Analyze
+        uses: github/codeql-action/analyze@5c8ea125689a2c5ae2672d1d914ac4bcd95d1b4b # v3
