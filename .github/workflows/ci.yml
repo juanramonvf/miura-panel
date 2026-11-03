@@ -1,0 +1,21 @@
+name: Miura CI
+
+on:
+  push:
+    branches:
+      - main
+      - development/v1.0.35-candidate
+  pull_request:
+    branches:
+      - main
+      - development/v1.0.35-candidate
+  workflow_dispatch:
+
+permissions:
+  actions: read
+  contents: read
+  security-events: write
+
+jobs:
+  validate:
+    uses: ./.github/workflows/validate.yml

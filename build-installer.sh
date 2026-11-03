@@ -3,8 +3,19 @@ set -Eeuo pipefail
 umask 022
 
 ROOT="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)"
-OUT_DIR="$ROOT/dist"
-OUT="$OUT_DIR/install-spanish-empire-panel-v1.0.35.sh"
+OUT_DIR="${MIURA_OUTPUT_DIR:-$ROOT/dist}"
+VERSION="$(python3 - "$ROOT/version.json" <<'PY'
+import json, re, sys
+try:
+    value=json.loads(open(sys.argv[1], encoding='utf-8').read())['version']
+except Exception as exc:
+    raise SystemExit('version.json inválido: '+str(exc))
+if not isinstance(value, str) or not re.fullmatch(r'(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)', value):
+    raise SystemExit('versión inválida en version.json')
+print(value)
+PY
+)"
+OUT="$OUT_DIR/install-spanish-empire-panel-v${VERSION}.sh"
 TEMP_DIR="$(mktemp -d -t miura-panel-build.XXXXXX)"
 trap 'rm -rf "$TEMP_DIR"' EXIT
 mkdir -p "$OUT_DIR" "$TEMP_DIR/source"
