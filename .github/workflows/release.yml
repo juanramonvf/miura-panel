@@ -4,6 +4,12 @@ on:
   push:
     tags:
       - "v*"
+  workflow_dispatch:
+    inputs:
+      release_tag:
+        description: "Existing immutable tag to recover from a workflow failure"
+        required: true
+        type: string
 
 permissions:
   actions: read
@@ -14,24 +20,73 @@ jobs:
   validate:
     uses: ./.github/workflows/validate.yml
 
+  recovery_guard:
+    name: Verify recovery tag and package source
+    if: github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout the selected main revision
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 0
+
+      - name: Confirm the existing tag is unchanged and package-identical
+        env:
+          GH_REPO: juanramonvf/miura-panel
+          GITHUB_REPOSITORY: ${{ github.repository }}
+          RELEASE_TAG: ${{ inputs.release_tag }}
+          RUN_REF: ${{ github.ref }}
+        run: |
+          set -Eeuo pipefail
+          [[ "$GITHUB_REPOSITORY" == "$GH_REPO" ]] || { echo 'Recovery is restricted to the official repository' >&2; exit 1; }
+          [[ "$RUN_REF" == refs/heads/main ]] || { echo 'Recovery must be dispatched from main' >&2; exit 1; }
+          [[ "$RELEASE_TAG" =~ ^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$ ]] || { echo 'Invalid stable semver recovery tag' >&2; exit 1; }
+          git fetch --no-tags origin "refs/tags/$RELEASE_TAG:refs/tags/$RELEASE_TAG"
+          TAG_COMMIT="$(git rev-parse "refs/tags/$RELEASE_TAG^{commit}")"
+          git merge-base --is-ancestor "$TAG_COMMIT" HEAD || { echo 'Recovery tag is not an ancestor of the selected main revision' >&2; exit 1; }
+          TAG_VERSION="$(git show "$TAG_COMMIT:version.json" | python3 -c 'import json,sys; print(json.load(sys.stdin)["version"])')"
+          MAIN_VERSION="$(python3 -c 'import json; print(json.load(open("version.json"))["version"])')"
+          [[ "$RELEASE_TAG" == "v$TAG_VERSION" && "$TAG_VERSION" == "$MAIN_VERSION" ]] || {
+            echo 'Recovery is limited to the current main version and its matching existing tag' >&2
+            exit 1
+          }
+          git diff --quiet "$TAG_COMMIT" HEAD -- \
+            version.json build-installer.sh scripts/release/package_release.py \
+            "RELEASE_NOTES_${RELEASE_TAG}.md" \
+            index.html admin.html admin-login.html admin-reset.html sep-logo.png \
+            collect.py live.py admin-web.py admin-setup.py admin-fleet.py fleet.py \
+            fleet-docker.py fleet-receiver.py docker-action.py docker-updates.py update.py || {
+              echo 'Release source differs from the immutable tag; refusing recovery package' >&2
+              exit 1
+            }
+          echo "Recovery source verified: $RELEASE_TAG at $TAG_COMMIT; package inputs match main."
+
   publish:
     name: Publish immutable GitHub Release
-    needs: validate
-    if: github.event.created == true
+    needs: [validate, recovery_guard]
+    if: >-
+      always() && needs.validate.result == 'success' &&
+      ((github.event_name == 'push' && github.event.created == true) ||
+       (github.event_name == 'workflow_dispatch' && needs.recovery_guard.result == 'success'))
     runs-on: ubuntu-24.04
     environment: release-publishing
     permissions:
       contents: write
+    env:
+      GH_REPO: juanramonvf/miura-panel
+      MIURA_RELEASE_TAG: ${{ github.event_name == 'workflow_dispatch' && inputs.release_tag || github.ref_name }}
     steps:
       - name: Fetch validated public tag without credentials
-        run: git clone --depth 1 --branch "$GITHUB_REF_NAME" https://github.com/juanramonvf/miura-panel.git release-source
+        run: git clone --depth 1 --branch "$MIURA_RELEASE_TAG" https://github.com/juanramonvf/miura-panel.git release-source
 
       - name: Check release immutability and reject existing releases
         env:
           GITHUB_REPOSITORY: ${{ github.repository }}
           GITHUB_TOKEN: ${{ github.token }}
           IMMUTABILITY_CHECK_TOKEN: ${{ secrets.IMMUTABILITY_CHECK_TOKEN }}
-          MIURA_RELEASE_TAG: ${{ github.ref_name }}
         run: python3 release-source/scripts/release/preflight_github_release.py
 
       - name: Download tested package
@@ -43,7 +98,7 @@ jobs:
       - name: Verify uploaded package hashes
         working-directory: release-assets
         run: |
-          VERSION="${GITHUB_REF_NAME#v}"
+          VERSION="${MIURA_RELEASE_TAG#v}"
           sha256sum -c "install-spanish-empire-panel-v${VERSION}.sh.sha256"
           sha256sum -c miura-panel-update-manifest.json.sha256
 
@@ -52,23 +107,23 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          VERSION="${GITHUB_REF_NAME#v}"
+          VERSION="${MIURA_RELEASE_TAG#v}"
           cp release-assets/RELEASE_NOTES.md release-assets/PUBLISH_NOTES.md
           printf '\n<!-- miura-release-run:%s -->\n' "$GITHUB_RUN_ID" >> release-assets/PUBLISH_NOTES.md
-          gh release create "$GITHUB_REF_NAME" \
+          gh release create "$MIURA_RELEASE_TAG" \
+            --repo "$GH_REPO" \
             "release-assets/install-spanish-empire-panel-v${VERSION}.sh" \
             "release-assets/install-spanish-empire-panel-v${VERSION}.sh.sha256" \
             release-assets/miura-panel-update-manifest.json \
             release-assets/miura-panel-update-manifest.json.sha256 \
             release-assets/RELEASE_NOTES.md \
-            --verify-tag --draft --title "Miura Panel $GITHUB_REF_NAME" \
+            --verify-tag --draft --title "Miura Panel $MIURA_RELEASE_TAG" \
             --notes-file release-assets/PUBLISH_NOTES.md
 
       - name: Verify complete draft assets before publishing
         env:
           GITHUB_REPOSITORY: ${{ github.repository }}
           GITHUB_TOKEN: ${{ github.token }}
-          MIURA_RELEASE_TAG: ${{ github.ref_name }}
         run: |
           python3 - <<'PY'
           import hashlib, json, os, pathlib, urllib.request
@@ -117,7 +172,7 @@ jobs:
         id: publish-release
         env:
           GH_TOKEN: ${{ github.token }}
-        run: gh release edit "$GITHUB_REF_NAME" --draft=false
+        run: gh release edit "$MIURA_RELEASE_TAG" --repo "$GH_REPO" --draft=false
 
       - name: Remove only this run's unpublished draft after failure
         if: always() && steps.create-draft.outcome != 'skipped' && steps.publish-release.outcome != 'success'
@@ -128,7 +183,7 @@ jobs:
         run: |
           release_id="$(python3 - <<'PY'
           import json,os,urllib.request
-          repo=os.environ['GITHUB_REPOSITORY']; tag=os.environ['GITHUB_REF_NAME']; token=os.environ['GH_TOKEN']
+          repo=os.environ['GITHUB_REPOSITORY']; tag=os.environ['MIURA_RELEASE_TAG']; token=os.environ['GH_TOKEN']
           base=f'https://api.github.com/repos/{repo}/releases'; page=1
           while page<=10000:
               req=urllib.request.Request(f'{base}?per_page=100&page={page}',headers={
@@ -146,7 +201,7 @@ jobs:
           PY
           )" || exit 0
           if [[ -n "$release_id" ]]; then
-            gh api -X DELETE "repos/${GITHUB_REPOSITORY}/releases/${release_id}"
+            gh api --repo "$GH_REPO" -X DELETE "repos/${GH_REPO}/releases/${release_id}"
             echo 'Removed only this run-owned draft; the tag was preserved.'
           fi
 
@@ -154,7 +209,7 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          immutable="$(gh api --paginate "repos/${GITHUB_REPOSITORY}/releases?per_page=100" -H 'X-GitHub-Api-Version: 2026-03-10' --jq '.[] | select(.tag_name == env.GITHUB_REF_NAME) | .immutable')"
+          immutable="$(gh api --repo "$GH_REPO" --paginate "repos/${GH_REPO}/releases?per_page=100" -H 'X-GitHub-Api-Version: 2026-03-10' --jq '.[] | select(.tag_name == env.MIURA_RELEASE_TAG) | .immutable')"
           [[ "$immutable" == true ]] || { echo 'Published release is not immutable' >&2; exit 1; }
 
   publish-pages-manifest:
@@ -172,6 +227,8 @@ jobs:
       contents: read
       pages: write
       id-token: write
+    env:
+      GH_REPO: juanramonvf/miura-panel
     steps:
       - name: Download tested package
         uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
