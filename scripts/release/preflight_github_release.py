@@ -20,30 +20,38 @@ def request_json(url: str, token: str, opener=urllib.request.urlopen) -> tuple[i
     })
     try:
         with opener(request, timeout=20) as response:
-            body = response.read(1024 * 1024)
+            body = response.read(8 * 1024 * 1024)
             payload = json.loads(body.decode("utf-8"))
             return response.status, payload
     except urllib.error.HTTPError as exc:
         return exc.code, None
 
 
-def check_github_release(repository: str, tag: str, read_token: str,
+def check_github_release(repository: str, tag: str, immutable_token: str, release_token: str,
                          opener=urllib.request.urlopen) -> None:
     if not re.fullmatch(r"[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+", repository):
         raise ValueError("GITHUB_REPOSITORY must be owner/repository")
     if not re.fullmatch(r"v(?:0|[1-9]\d*)\.(?:0|[1-9]\d*)\.(?:0|[1-9]\d*)", tag):
         raise ValueError("MIURA_RELEASE_TAG must be vMAJOR.MINOR.PATCH")
-    if not read_token:
+    if not immutable_token:
         raise ValueError("IMMUTABILITY_CHECK_TOKEN is required")
+    if not release_token:
+        raise ValueError("GITHUB_TOKEN is required to check existing releases and drafts")
     base = f"{API}/repos/{repository}"
-    status, policy = request_json(base + "/immutable-releases", read_token, opener)
+    status, policy = request_json(base + "/immutable-releases", immutable_token, opener)
     if status != 200 or not isinstance(policy, dict) or policy.get("enabled") is not True:
         raise RuntimeError("Release immutability is disabled or could not be verified")
-    status, _ = request_json(base + f"/releases/tags/{tag}", read_token, opener)
-    if status == 200:
-        raise RuntimeError(f"A release or draft already exists for {tag}")
-    if status != 404:
-        raise RuntimeError(f"Could not determine whether {tag} exists (API HTTP {status})")
+    page = 1
+    while page <= 10000:
+        status, releases = request_json(base + f"/releases?per_page=100&page={page}", release_token, opener)
+        if status != 200 or not isinstance(releases, list):
+            raise RuntimeError(f"Could not list releases and drafts (API HTTP {status})")
+        if any(isinstance(release, dict) and release.get("tag_name") == tag for release in releases):
+            raise RuntimeError(f"A release or draft already exists for {tag}")
+        if len(releases) < 100:
+            return
+        page += 1
+    raise RuntimeError("Release listing exceeded the pagination safety limit")
 
 
 def main() -> None:
@@ -52,6 +60,7 @@ def main() -> None:
             os.environ.get("GITHUB_REPOSITORY", ""),
             os.environ.get("MIURA_RELEASE_TAG", ""),
             os.environ.get("IMMUTABILITY_CHECK_TOKEN", ""),
+            os.environ.get("GITHUB_TOKEN", ""),
         )
     except Exception as exc:
         raise SystemExit(f"ERROR: release preflight failed closed: {exc}") from exc

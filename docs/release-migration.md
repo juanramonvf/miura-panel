@@ -56,18 +56,18 @@ requiere acceso de lectura de administración para este endpoint; el
 
 Guarde un secreto de entorno, por ejemplo
 `IMMUTABILITY_CHECK_TOKEN`, como token fine-grained con acceso solo a este
-repositorio y permisos **Administration: read** y **Contents: read**. Use ese
-secreto para consultar tanto la política de inmutabilidad como si ya existe
-una release o borrador con el tag. No pase el `GITHUB_TOKEN` con
-`contents: write` al helper de preflight. Alternativamente, emita un token de
-instalación de GitHub App administrado de forma segura con solo esos permisos
-de lectura. Ese secreto de lectura también puede autorizar el checkout del tag
-y la comprobación de que el borrador creado contiene el conjunto exacto de
-assets; el helper solo debe recibir el token de lectura. No otorgue
-`contents: write` ni `Administration: write` al token de comprobación y no
-reutilice el token de publicación. Si el secreto falta, expiró o carece de
-permiso, el release job debe detenerse antes de crear tags/releases. No
-imprima el token en logs.
+repositorio y permiso **Administration: read** (más el permiso de metadata de
+lectura que GitHub requiere). Úselo únicamente para `GET
+/immutable-releases`. Alternativamente, emita un token de instalación de
+GitHub App con ese permiso de lectura. El `GITHUB_TOKEN` del job con
+`contents: write` debe consultar la lista paginada de releases para detectar
+tags y borradores existentes, verificar el borrador que acaba de crear y
+limpiar solo el borrador de su propio run si algo falla; esos endpoints pueden
+ocultar borradores a tokens de solo lectura. El checkout del tag público usa
+HTTPS anónimo y no necesita el token de publicación. El `GITHUB_TOKEN` solo se
+inyecta en los pasos que consultan o modifican el ciclo de vida de Releases.
+Si falta el secreto administrativo, expira o carece de permiso, el release job
+debe detenerse antes de crear tags/releases. No imprima tokens en logs.
 
 El workflow debe crear una sola release por tag con todos los assets finales
 (instalador, suma, manifiesto versionado y notas) antes de marcarla publicada.

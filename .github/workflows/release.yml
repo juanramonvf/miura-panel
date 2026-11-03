@@ -23,20 +23,16 @@ jobs:
     permissions:
       contents: write
     steps:
-      - name: Checkout validated release source without credentials
-        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
-        with:
-          ref: ${{ github.ref }}
-          fetch-depth: 1
-          token: ${{ secrets.IMMUTABILITY_CHECK_TOKEN }}
-          persist-credentials: false
+      - name: Fetch validated public tag without credentials
+        run: git clone --depth 1 --branch "$GITHUB_REF_NAME" https://github.com/juanramonvf/miura-panel.git release-source
 
       - name: Check release immutability and reject existing releases
         env:
           GITHUB_REPOSITORY: ${{ github.repository }}
+          GITHUB_TOKEN: ${{ github.token }}
           IMMUTABILITY_CHECK_TOKEN: ${{ secrets.IMMUTABILITY_CHECK_TOKEN }}
           MIURA_RELEASE_TAG: ${{ github.ref_name }}
-        run: python3 scripts/release/preflight_github_release.py
+        run: python3 release-source/scripts/release/preflight_github_release.py
 
       - name: Download tested package
         uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
@@ -71,13 +67,13 @@ jobs:
       - name: Verify complete draft assets before publishing
         env:
           GITHUB_REPOSITORY: ${{ github.repository }}
-          IMMUTABILITY_CHECK_TOKEN: ${{ secrets.IMMUTABILITY_CHECK_TOKEN }}
+          GITHUB_TOKEN: ${{ github.token }}
           MIURA_RELEASE_TAG: ${{ github.ref_name }}
         run: |
           python3 - <<'PY'
           import hashlib, json, os, pathlib, urllib.request
           repo=os.environ['GITHUB_REPOSITORY']; tag=os.environ['MIURA_RELEASE_TAG']
-          token=os.environ['IMMUTABILITY_CHECK_TOKEN']; root=pathlib.Path('release-assets')
+          token=os.environ['GITHUB_TOKEN']; root=pathlib.Path('release-assets')
           version=tag[1:]
           expected={
               f'install-spanish-empire-panel-v{version}.sh',
@@ -86,11 +82,20 @@ jobs:
               'miura-panel-update-manifest.json.sha256',
               'RELEASE_NOTES.md',
           }
-          req=urllib.request.Request(f'https://api.github.com/repos/{repo}/releases/tags/{tag}',headers={
-              'Accept':'application/vnd.github+json','Authorization':'Bearer '+token,
-              'X-GitHub-Api-Version':'2026-03-10','User-Agent':'miura-panel-release-check'})
-          with urllib.request.urlopen(req,timeout=20) as response:
-              release=json.loads(response.read(2*1024*1024).decode())
+          base=f'https://api.github.com/repos/{repo}/releases'
+          release=None; page=1
+          while page<=10000:
+              req=urllib.request.Request(f'{base}?per_page=100&page={page}',headers={
+                  'Accept':'application/vnd.github+json','Authorization':'Bearer '+token,
+                  'X-GitHub-Api-Version':'2026-03-10','User-Agent':'miura-panel-release-check'})
+              with urllib.request.urlopen(req,timeout=20) as response:
+                  releases=json.loads(response.read(4*1024*1024).decode())
+              if not isinstance(releases,list): raise SystemExit('Release listing API response is invalid')
+              release=next((item for item in releases if item.get('tag_name')==tag),None)
+              if release is not None or len(releases)<100: break
+              page+=1
+          if page>10000: raise SystemExit('Release listing exceeded pagination safety limit')
+          if release is None: raise SystemExit('Created draft is not visible with GITHUB_TOKEN')
           if release.get('draft') is not True: raise SystemExit('Expected an unpublished draft release')
           if f'<!-- miura-release-run:{os.environ["GITHUB_RUN_ID"]} -->' not in release.get('body',''):
               raise SystemExit('Draft release is not owned by this workflow run')
@@ -119,19 +124,37 @@ jobs:
         continue-on-error: true
         env:
           GH_TOKEN: ${{ github.token }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
         run: |
-          body="$(gh api "repos/${GITHUB_REPOSITORY}/releases/tags/${GITHUB_REF_NAME}" --jq .body 2>/dev/null)" || exit 0
-          draft="$(gh api "repos/${GITHUB_REPOSITORY}/releases/tags/${GITHUB_REF_NAME}" --jq .draft)" || exit 0
-          if [[ "$draft" == true && "$body" == *"<!-- miura-release-run:${GITHUB_RUN_ID} -->"* ]]; then
-            gh release delete "$GITHUB_REF_NAME" --yes
+          release_id="$(python3 - <<'PY'
+          import json,os,urllib.request
+          repo=os.environ['GITHUB_REPOSITORY']; tag=os.environ['GITHUB_REF_NAME']; token=os.environ['GH_TOKEN']
+          base=f'https://api.github.com/repos/{repo}/releases'; page=1
+          while page<=10000:
+              req=urllib.request.Request(f'{base}?per_page=100&page={page}',headers={
+                  'Accept':'application/vnd.github+json','Authorization':'Bearer '+token,
+                  'X-GitHub-Api-Version':'2026-03-10','User-Agent':'miura-panel-release-cleanup'})
+              with urllib.request.urlopen(req,timeout=20) as response: releases=json.loads(response.read(4*1024*1024).decode())
+              release=next((item for item in releases if item.get('tag_name')==tag),None)
+              if release:
+                  marker=f'<!-- miura-release-run:{os.environ["GITHUB_RUN_ID"]} -->'
+                  if release.get('draft') and marker in release.get('body',''):
+                      print(release['id'])
+                  break
+              if len(releases)<100: break
+              page+=1
+          PY
+          )" || exit 0
+          if [[ -n "$release_id" ]]; then
+            gh api -X DELETE "repos/${GITHUB_REPOSITORY}/releases/${release_id}"
             echo 'Removed only this run-owned draft; the tag was preserved.'
           fi
 
       - name: Verify published release is immutable
         env:
-          GH_TOKEN: ${{ secrets.IMMUTABILITY_CHECK_TOKEN }}
+          GH_TOKEN: ${{ github.token }}
         run: |
-          immutable="$(gh api "repos/${GITHUB_REPOSITORY}/releases/tags/${GITHUB_REF_NAME}" -H 'X-GitHub-Api-Version: 2026-03-10' --jq .immutable)"
+          immutable="$(gh api --paginate "repos/${GITHUB_REPOSITORY}/releases?per_page=100" -H 'X-GitHub-Api-Version: 2026-03-10' --jq '.[] | select(.tag_name == env.GITHUB_REF_NAME) | .immutable')"
           [[ "$immutable" == true ]] || { echo 'Published release is not immutable' >&2; exit 1; }
 
   publish-pages-manifest:

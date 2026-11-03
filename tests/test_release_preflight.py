@@ -45,38 +45,52 @@ class ImmutableReleasePreflightTests(unittest.TestCase):
     repo = "juanramonvf/miura-panel"
     tag = "v9.8.7"
 
-    def check(self, opener, *, immutable_token="admin-read-token"):
+    def check(self, opener, *, immutable_token="admin-read-token", release_token="contents-write-token"):
         return preflight.check_github_release(
-            self.repo, self.tag, immutable_token, opener=opener
+            self.repo, self.tag, immutable_token, release_token, opener=opener
         )
 
-    def test_immutable_enabled_and_tag_lookup_404_allows_new_release(self):
-        opener = FakeOpener([(200, {"enabled": True}), (404, {})])
+    def test_immutable_enabled_and_release_listing_without_tag_allows_new_release(self):
+        opener = FakeOpener([(200, {"enabled": True}), (200, [])])
         self.assertIsNone(self.check(opener))
         self.assertEqual(len(opener.requests), 2)
         immutable_request, immutable_timeout = opener.requests[0]
         release_request, release_timeout = opener.requests[1]
         self.assertTrue(immutable_request.full_url.endswith("/immutable-releases"))
-        self.assertTrue(release_request.full_url.endswith(f"/releases/tags/{self.tag}"))
+        self.assertTrue(release_request.full_url.endswith("/releases?per_page=100&page=1"))
         self.assertEqual(immutable_request.get_header("Authorization"), "Bearer admin-read-token")
-        self.assertEqual(release_request.get_header("Authorization"), "Bearer admin-read-token")
+        self.assertEqual(release_request.get_header("Authorization"), "Bearer contents-write-token")
         self.assertEqual((immutable_timeout, release_timeout), (20, 20))
 
     def test_existing_published_release_is_rejected(self):
-        opener = FakeOpener([(200, {"enabled": True}), (200, {"draft": False})])
+        opener = FakeOpener([(200, {"enabled": True}), (200, [{"tag_name": self.tag, "draft": False}])])
         with self.assertRaisesRegex(RuntimeError, "already exists"):
             self.check(opener)
         self.assertEqual(len(opener.requests), 2)
 
     def test_existing_draft_is_rejected(self):
-        opener = FakeOpener([(200, {"enabled": True}), (200, {"draft": True})])
+        opener = FakeOpener([(200, {"enabled": True}), (200, [{"tag_name": self.tag, "draft": True}])])
         with self.assertRaisesRegex(RuntimeError, "already exists"):
             self.check(opener)
+
+    def test_contents_write_token_finds_draft_on_a_later_page(self):
+        first_page = [{"tag_name": f"v2.0.{index}", "draft": False} for index in range(100)]
+        second_page = [{"tag_name": self.tag, "draft": True}]
+        opener = FakeOpener([(200, {"enabled": True}), (200, first_page), (200, second_page)])
+        with self.assertRaisesRegex(RuntimeError, "already exists"):
+            self.check(opener)
+        self.assertTrue(opener.requests[1][0].full_url.endswith("page=1"))
+        self.assertTrue(opener.requests[2][0].full_url.endswith("page=2"))
+        self.assertEqual(opener.requests[1][0].get_header("Authorization"), "Bearer contents-write-token")
+        self.assertEqual(opener.requests[2][0].get_header("Authorization"), "Bearer contents-write-token")
 
     def test_missing_tokens_fail_before_any_api_request(self):
         opener = FakeOpener([])
         with self.assertRaisesRegex(ValueError, "required"):
             self.check(opener, immutable_token="")
+        self.assertEqual(opener.requests, [])
+        with self.assertRaisesRegex(ValueError, "GITHUB_TOKEN"):
+            self.check(opener, release_token="")
         self.assertEqual(opener.requests, [])
 
     def test_malformed_tag_fails_before_any_api_request(self):
@@ -85,7 +99,7 @@ class ImmutableReleasePreflightTests(unittest.TestCase):
                 opener = FakeOpener([])
                 with self.assertRaisesRegex(ValueError, "vMAJOR.MINOR.PATCH"):
                     preflight.check_github_release(
-                        self.repo, tag, "admin-read-token", opener=opener
+                        self.repo, tag, "admin-read-token", "contents-write-token", opener=opener
                     )
                 self.assertEqual(opener.requests, [])
 
@@ -95,7 +109,7 @@ class ImmutableReleasePreflightTests(unittest.TestCase):
                 opener = FakeOpener([])
                 with self.assertRaisesRegex(ValueError, "owner/repository"):
                     preflight.check_github_release(
-                        repo, self.tag, "admin-read-token", opener=opener
+                        repo, self.tag, "admin-read-token", "contents-write-token", opener=opener
                     )
                 self.assertEqual(opener.requests, [])
 
