@@ -273,7 +273,7 @@ jobs:
       GH_REPO: juanramonvf/miura-panel
     steps:
       - name: Configure GitHub Pages
-        uses: actions/configure-pages@4bfa242aa49c5f7c6770b98670d354a7dfac05f8 # v5
+        uses: actions/configure-pages@983d7736d9b0ae728b81ab479565c72886d7745b # v5
 
       - name: Build non-downgrading stable and immutable version manifests
         env:
