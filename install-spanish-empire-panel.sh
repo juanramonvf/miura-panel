@@ -8,6 +8,11 @@ WEB_REL='var/www/server-dashboard'
 BIN_REL='usr/local/sbin'
 CONF_REL='etc/server-dashboard.conf'
 STATE_REL='var/lib/server-dashboard'
+PREFS_REL="$STATE_REL/preferences"
+PREFS_FILE_REL="$PREFS_REL/ui.json"
+ADMIN_UNIT_REL='etc/systemd/system/server-dashboard-admin.service'
+ADMIN_DROPIN_REL='etc/systemd/system/server-dashboard-admin.service.d'
+ADMIN_DROPIN_FILE_REL="$ADMIN_DROPIN_REL/miura-preferences.conf"
 BACKUP_REL='var/backups/server-dashboard'
 LEGACY_ADMIN_ALIAS_REL='usr/local/sbin/miura-panel-admin-setup'
 LEGACY_ADMIN_TARGET_REL='usr/local/sbin/spanish-empire-panel-admin-setup'
@@ -135,6 +140,27 @@ assert_safe_leaf() {
   [[ ! -e "$1" || -f "$1" ]] || fail "El destino gestionado debe ser un archivo regular: $1"
   if [[ -f "$1" ]] && (( $(stat -c '%h' -- "$1") > 1 )); then fail "No se permite un enlace físico en un archivo gestionado: $1"; fi
 }
+assert_safe_root_owned_chain() {
+  local path="$1" boundary expected_uid owner mode
+  boundary="${ROOT_PREFIX:-/}"
+  boundary="$(cd -- "$boundary" && pwd -P)"
+  expected_uid=0
+  [[ -z "$ROOT_PREFIX" ]] || expected_uid="$EUID"
+  while [[ ! -e "$path" ]]; do
+    [[ "$path" != "$boundary" && "$path" != / ]] || fail "No existe un directorio seguro para el drop-in: $path"
+    path="$(dirname -- "$path")"
+  done
+  [[ -d "$path" && ! -L "$path" ]] || fail "El padre del drop-in debe ser un directorio real: $path"
+  while :; do
+    owner="$(stat -c '%u' -- "$path")"
+    mode="$(stat -c '%a' -- "$path")"
+    [[ "$owner" == "$expected_uid" ]] || fail "Un directorio del drop-in no pertenece al propietario esperado: $path"
+    (( (8#$mode & 0022) == 0 )) || fail "Un directorio del drop-in permite escritura a grupo u otros: $path"
+    [[ "$path" == "$boundary" ]] && break
+    [[ "$path" != / ]] || fail 'No se pudo confinar la comprobación del drop-in al root prefix'
+    path="$(dirname -- "$path")"
+  done
+}
 assert_safe_legacy_admin_alias() {
   local path="$1" expected_target target_path parent_path expected_uid target_uid root_boundary
   local target_mode target_links parent_uid parent_mode
@@ -189,10 +215,14 @@ assert_safe_managed_leaf() {
 assert_safe_path "$BACKUP_REL"
 assert_safe_path "$WEB_REL"
 assert_safe_path "$STATE_REL"
+assert_safe_path "$PREFS_REL"
+assert_safe_path "$ADMIN_DROPIN_REL"
 assert_safe_path "$BIN_REL"
 assert_safe_path 'etc/systemd/system'
 assert_safe_path "$(dirname "$CONF_REL")"
 assert_safe_leaf "$(root_path "$CONF_REL")"
+assert_safe_leaf "$(root_path "$PREFS_FILE_REL")"
+assert_safe_leaf "$(root_path "$ADMIN_DROPIN_FILE_REL")"
 for rel in \
   usr/local/sbin/server-dashboard-collect.py usr/local/sbin/server-dashboard-live.py \
   usr/local/sbin/server-dashboard-admin.py usr/local/sbin/miura-panel-admin-setup \
@@ -206,6 +236,43 @@ for rel in \
   etc/systemd/system/server-dashboard-collector.timer; do
   assert_safe_managed_leaf "$(root_path "$rel")"
 done
+ADMIN_UNIT_PRESENT=0
+if [[ -n "$ROOT_PREFIX" ]]; then
+  for candidate in \
+    "$(root_path "$ADMIN_UNIT_REL")" \
+    "$(root_path usr/lib/systemd/system/server-dashboard-admin.service)" \
+    "$(root_path lib/systemd/system/server-dashboard-admin.service)"; do
+    if [[ -f "$candidate" ]]; then ADMIN_UNIT_PRESENT=1; break; fi
+  done
+elif systemctl cat server-dashboard-admin.service >/dev/null 2>&1; then
+  ADMIN_UNIT_PRESENT=1
+fi
+if ((ADMIN_UNIT_PRESENT)) && [[ -e "$(root_path "$ADMIN_DROPIN_FILE_REL")" ]]; then
+  printf '[Service]\nSupplementaryGroups=server-dashboard-prefs\nReadWritePaths=/var/lib/server-dashboard/preferences\n' |
+    cmp -s - "$(root_path "$ADMIN_DROPIN_FILE_REL")" ||
+    fail 'El drop-in de preferencias de server-dashboard-admin.service contiene cambios no gestionados; no se sobrescribirá'
+fi
+if ((ADMIN_UNIT_PRESENT)); then
+  assert_safe_root_owned_chain "$(root_path "$ADMIN_DROPIN_REL")"
+  ADMIN_DROPIN_FILE="$(root_path "$ADMIN_DROPIN_FILE_REL")"
+  if [[ -e "$ADMIN_DROPIN_FILE" ]]; then
+    expected_dropin_uid=0
+    [[ -z "$ROOT_PREFIX" ]] || expected_dropin_uid="$EUID"
+    [[ "$(stat -c '%u' -- "$ADMIN_DROPIN_FILE")" == "$expected_dropin_uid" ]] ||
+      fail 'El drop-in existente no pertenece al propietario esperado'
+    existing_mode="$(stat -c '%a' -- "$ADMIN_DROPIN_FILE")"
+    (( (8#$existing_mode & 0022) == 0 )) || fail 'El drop-in existente permite escritura a grupo u otros'
+  fi
+fi
+if [[ -z "$ROOT_PREFIX" ]] && ! getent group server-dashboard-prefs >/dev/null; then
+  command -v groupadd >/dev/null || fail 'Falta groupadd para crear el grupo server-dashboard-prefs'
+  groupadd --system server-dashboard-prefs || fail 'No se pudo crear el grupo server-dashboard-prefs'
+fi
+if [[ -z "$ROOT_PREFIX" ]]; then
+  PREFS_GROUP_ENTRY="$(getent group server-dashboard-prefs)" || fail 'No se encuentra el grupo server-dashboard-prefs'
+  PREFS_GROUP_MEMBERS="${PREFS_GROUP_ENTRY##*:}"
+  [[ -z "$PREFS_GROUP_MEMBERS" ]] || fail 'El grupo server-dashboard-prefs debe ser exclusivo y no tener miembros añadidos'
+fi
 WEB="$(root_path "$WEB_REL")"
 BIN="$(root_path "$BIN_REL")"
 CONF="$(root_path "$CONF_REL")"
@@ -321,12 +388,51 @@ with tempfile.TemporaryDirectory(prefix='miura-rollback-') as temp_name:
         if src.is_file():
             dest.parent.mkdir(parents=True, exist_ok=True)
             shutil.copyfile(src, dest)
-            dest.chmod(src.stat().st_mode & 0o755)
+            mode = src.stat().st_mode & 0o755
+            if rel == 'usr/local/sbin/server-dashboard-live.py':
+                mode = 0o750
+            dest.chmod(mode)
+            if os.geteuid() == 0 and rel == 'usr/local/sbin/server-dashboard-live.py':
+                os.chown(dest, 0, grp.getgrnam('www-data').gr_gid)
+    # Keep service sandbox permissions after rolling back to an older backup.
+    # The web process still needs its preferences write exception and group;
+    # the collector is confined to the two trees it owns as generated output.
+    for rel, required in {
+        'etc/systemd/system/server-dashboard-web.service': {
+            'SupplementaryGroups': 'server-dashboard-prefs',
+            'ProtectSystem': 'strict',
+            'ProtectHome': 'true',
+            'ReadWritePaths': '/var/lib/server-dashboard/preferences',
+        },
+        'etc/systemd/system/server-dashboard-collector.service': {
+            'NoNewPrivileges': 'true',
+            'PrivateTmp': 'true',
+            'ProtectSystem': 'strict',
+            'ProtectHome': 'true',
+            'ReadWritePaths': '/var/lib/server-dashboard /var/www/server-dashboard',
+        },
+    }.items():
+        unit = root.joinpath(*pathlib.PurePosixPath(rel).parts)
+        if unit.is_symlink() or not unit.is_file():
+            continue
+        lines = unit.read_text(encoding='utf-8').splitlines()
+        lines = [line for line in lines if line.split('=', 1)[0] not in required]
+        try:
+            service_index = lines.index('[Service]')
+        except ValueError:
+            continue
+        lines[service_index + 1:service_index + 1] = [f'{key}={value}' for key, value in required.items()]
+        unit.write_text('\n'.join(lines) + '\n', encoding='utf-8')
 PY
   if [[ -z "$ROOT_PREFIX" ]] && command -v systemctl >/dev/null; then
     systemctl daemon-reload
     systemctl restart server-dashboard-web.service
     systemctl enable --now server-dashboard-collector.timer
+    if systemctl cat server-dashboard-admin.service >/dev/null 2>&1 &&
+       [[ -f "$(root_path "$ADMIN_DROPIN_FILE_REL")" ]] &&
+       systemctl is-active --quiet server-dashboard-admin.service; then
+      systemctl restart server-dashboard-admin.service
+    fi
   fi
   printf 'Rollback completado desde %s\n' "$ROLLBACK"
   exit 0
@@ -363,6 +469,22 @@ for file in "${FILES[@]}"; do [[ -f "$SCRIPT_DIR/$file" ]] || fail "Falta archiv
 PY_FILES=(collect.py live.py admin-web.py admin-setup.py admin-fleet.py fleet.py fleet-docker.py fleet-receiver.py docker-action.py docker-updates.py update.py)
 for file in "${PY_FILES[@]}"; do [[ -f "$SCRIPT_DIR/$file" ]] || fail "Falta archivo de aplicación: $file"; done
 mkdir -p "$BACKUPS" "$WEB" "$BIN" "$STATE"
+PREFS_DIR="$(root_path "$PREFS_REL")"
+PREFS_FILE="$(root_path "$PREFS_FILE_REL")"
+mkdir -p "$PREFS_DIR"
+# The web process can traverse the state root but gets no listing or write
+# rights there. Its only persistent writable state is the visual preferences
+# subdirectory, owned by a dedicated, non-shared preferences group.
+if [[ -z "$ROOT_PREFIX" ]]; then
+  chown root:server-dashboard-prefs "$STATE" "$PREFS_DIR"
+  [[ ! -f "$PREFS_FILE" ]] || chown root:server-dashboard-prefs "$PREFS_FILE"
+elif (( EUID == 0 )) && getent group server-dashboard-prefs >/dev/null; then
+  chown root:server-dashboard-prefs "$STATE" "$PREFS_DIR"
+  [[ ! -f "$PREFS_FILE" ]] || chown root:server-dashboard-prefs "$PREFS_FILE"
+fi
+chmod 0710 "$STATE"
+chmod 2770 "$PREFS_DIR"
+if [[ -f "$PREFS_FILE" ]]; then chmod 0660 "$PREFS_FILE"; fi
 python3 - "$WEB" <<'PY'
 import os, pathlib, stat, sys
 root=pathlib.Path(sys.argv[1])
@@ -516,6 +638,8 @@ for src in "${!ALIASES[@]}"; do
     # Keep the documented legacy link and update its referent; both the
     # Miura and Spanish command names remain aliases to the same new program.
     install -m 0750 "$SCRIPT_DIR/$src" "$(root_path "$LEGACY_ADMIN_TARGET_REL")"
+  elif [[ "$src" == live.py && ( -z "$ROOT_PREFIX" || $EUID -eq 0 ) ]]; then
+    install -o root -g www-data -m 0750 "$SCRIPT_DIR/$src" "$BIN/${ALIASES[$src]}"
   else
     install -m 0750 "$SCRIPT_DIR/$src" "$BIN/${ALIASES[$src]}"
   fi
@@ -591,6 +715,7 @@ After=network.target
 Type=simple
 User=www-data
 Group=www-data
+SupplementaryGroups=server-dashboard-prefs
 ExecStart=/usr/bin/python3 /usr/local/sbin/server-dashboard-live.py
 Restart=on-failure
 RestartSec=3
@@ -598,6 +723,7 @@ NoNewPrivileges=true
 PrivateTmp=true
 ProtectSystem=strict
 ProtectHome=true
+ReadWritePaths=/var/lib/server-dashboard/preferences
 
 [Install]
 WantedBy=multi-user.target
@@ -610,6 +736,11 @@ After=network.target
 [Service]
 Type=oneshot
 ExecStart=/usr/bin/python3 /usr/local/sbin/server-dashboard-collect.py
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/var/lib/server-dashboard /var/www/server-dashboard
 EOF
 cat > "$(root_path etc/systemd/system/server-dashboard-collector.timer)" <<'EOF'
 [Unit]
@@ -624,10 +755,45 @@ Unit=server-dashboard-collector.service
 WantedBy=timers.target
 EOF
 
+if ((ADMIN_UNIT_PRESENT)); then
+  assert_safe_path "$ADMIN_DROPIN_REL"
+  ADMIN_DROPIN_DIR="$(root_path "$ADMIN_DROPIN_REL")"
+  ADMIN_DROPIN_FILE="$(root_path "$ADMIN_DROPIN_FILE_REL")"
+  assert_safe_leaf "$ADMIN_DROPIN_FILE"
+  assert_safe_root_owned_chain "$ADMIN_DROPIN_DIR"
+  if [[ -e "$ADMIN_DROPIN_FILE" ]]; then
+    expected_dropin_uid=0
+    [[ -z "$ROOT_PREFIX" ]] || expected_dropin_uid="$EUID"
+    [[ "$(stat -c '%u' -- "$ADMIN_DROPIN_FILE")" == "$expected_dropin_uid" ]] ||
+      fail 'El drop-in existente no pertenece al propietario esperado'
+    existing_mode="$(stat -c '%a' -- "$ADMIN_DROPIN_FILE")"
+    (( (8#$existing_mode & 0022) == 0 )) || fail 'El drop-in existente permite escritura a grupo u otros'
+  fi
+  mkdir -p "$ADMIN_DROPIN_DIR"
+  assert_safe_root_owned_chain "$ADMIN_DROPIN_DIR"
+  ADMIN_DROPIN_TMP="$(mktemp "$ADMIN_DROPIN_DIR/.miura-preferences.XXXXXX")" || fail 'No se pudo preparar el drop-in seguro'
+  if ! cat > "$ADMIN_DROPIN_TMP" <<'EOF'
+[Service]
+SupplementaryGroups=server-dashboard-prefs
+ReadWritePaths=/var/lib/server-dashboard/preferences
+EOF
+  then
+    rm -f -- "$ADMIN_DROPIN_TMP"
+    fail 'No se pudo escribir el drop-in seguro'
+  fi
+  if [[ -z "$ROOT_PREFIX" ]]; then chown root:root "$ADMIN_DROPIN_DIR" "$ADMIN_DROPIN_TMP"; fi
+  chmod 0755 "$ADMIN_DROPIN_DIR"
+  chmod 0644 "$ADMIN_DROPIN_TMP"
+  mv -fT "$ADMIN_DROPIN_TMP" "$ADMIN_DROPIN_FILE"
+fi
+
 if [[ -z "$ROOT_PREFIX" ]] && command -v systemctl >/dev/null; then
   systemctl daemon-reload
   systemctl enable --now server-dashboard-web.service server-dashboard-collector.timer
   systemctl restart server-dashboard-web.service
+  if ((ADMIN_UNIT_PRESENT)) && systemctl is-active --quiet server-dashboard-admin.service; then
+    systemctl restart server-dashboard-admin.service
+  fi
 fi
 rm -rf "$OLD_HOLDER"
 OLD_WEB=''

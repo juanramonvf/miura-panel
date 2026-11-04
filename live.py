@@ -122,7 +122,7 @@ def write_prefs(obj):
     try:
         with os.fdopen(fd, "w", encoding="utf-8") as f:
             os.fchmod(f.fileno(), 0o660)
-            os.fchown(f.fileno(), -1, grp.getgrnam("server-dashboard").gr_gid)
+            os.fchown(f.fileno(), -1, grp.getgrnam("server-dashboard-prefs").gr_gid)
             json.dump(obj, f, ensure_ascii=False, separators=(",", ":"))
             f.write("\n")
             f.flush()
@@ -545,15 +545,13 @@ class Handler(SimpleHTTPRequestHandler):
         self.wfile.write(body)
 
     def do_POST(self):
-        # SEGURIDAD SEP 1.0.14: HTTP siempre es solo lectura, con o sin TLS
-        # configurado. Ninguna petición HTTP anónima puede actualizar Docker
-        # ni alterar preferencias persistentes del servidor.
         if MODE == "demo":
             self.send_json(403, {"ok": False, "error": "El modo demo es de solo lectura"})
             return
-        if not ADMIN_MODE:
-            self.send_json(403, {"ok": False, "error": "Cambios disponibles únicamente con inicio de sesión HTTPS"})
-            return
+        # The sole unauthenticated HTTP write is the explicitly visual
+        # preference document. It contains no credentials or privileged
+        # actions and is constrained by strict same-origin, JSON, and schema
+        # checks. All other POST routes remain behind HTTPS admin auth.
         if self.path == "/api/preferences":
             if not is_own_origin(self.headers) or self.headers.get("Content-Type", "").split(";")[0].strip() != "application/json":
                 self.send_json(403, {"ok": False, "error": "Origen no autorizado"})
@@ -575,6 +573,9 @@ class Handler(SimpleHTTPRequestHandler):
                 self.send_json(200, {"ok": True})
             except (ValueError, TypeError, OSError) as e:
                 self.send_json(400, {"ok": False, "error": str(e)})
+            return
+        if not ADMIN_MODE:
+            self.send_json(403, {"ok": False, "error": "Cambios disponibles únicamente con inicio de sesión HTTPS"})
             return
         if self.path != "/api/docker-action":
             self.send_error(404)
