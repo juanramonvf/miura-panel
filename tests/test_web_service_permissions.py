@@ -228,6 +228,7 @@ class WebServicePermissionTests(unittest.TestCase):
             with self.subTest(old_version=old_version), tempfile.TemporaryDirectory(
                     prefix=f"miura-web-upgrade-{old_version}-") as temp:
                 os.chown(temp, 0, grp.getgrnam("www-data").gr_gid)
+                # codeql[py/overly-permissive-file] Directory group-search only; required to traverse as www-data.
                 os.chmod(temp, 0o710)
                 prefix = pathlib.Path(temp) / "root"
                 self.run_installer(OLD_INSTALLER, prefix, "--demo")
@@ -296,6 +297,7 @@ class WebServicePermissionTests(unittest.TestCase):
         prefs_gid = named_prefs_gid() or www_gid
         with tempfile.TemporaryDirectory(prefix="miura-web-www-data-") as temp:
             os.chown(temp, 0, www_gid)
+            # codeql[py/overly-permissive-file] Directory group-search only; required to traverse as www-data.
             os.chmod(temp, 0o710)
             prefix = pathlib.Path(temp) / "root"
             self.run_installer(INSTALLER, prefix, "--demo")
