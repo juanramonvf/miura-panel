@@ -9,6 +9,8 @@ BIN_REL='usr/local/sbin'
 CONF_REL='etc/server-dashboard.conf'
 STATE_REL='var/lib/server-dashboard'
 BACKUP_REL='var/backups/server-dashboard'
+LEGACY_ADMIN_ALIAS_REL='usr/local/sbin/miura-panel-admin-setup'
+LEGACY_ADMIN_TARGET_REL='usr/local/sbin/spanish-empire-panel-admin-setup'
 MODE=''
 UPGRADE=0
 ROLLBACK=''
@@ -133,6 +135,53 @@ assert_safe_leaf() {
   [[ ! -e "$1" || -f "$1" ]] || fail "El destino gestionado debe ser un archivo regular: $1"
   if [[ -f "$1" ]] && (( $(stat -c '%h' -- "$1") > 1 )); then fail "No se permite un enlace físico en un archivo gestionado: $1"; fi
 }
+assert_safe_legacy_admin_alias() {
+  local path="$1" expected_target target_path parent_path expected_uid target_uid root_boundary
+  local target_mode target_links parent_uid parent_mode
+  expected_target='spanish-empire-panel-admin-setup'
+  [[ "$path" == "$(root_path "$LEGACY_ADMIN_ALIAS_REL")" && -L "$path" ]] ||
+    fail "Solo se admite el alias heredado conocido de Miura Panel: $path"
+  [[ "$(readlink -- "$path")" == "$expected_target" ]] ||
+    fail "El alias heredado de administración tiene un destino no permitido: $path"
+  target_path="$(root_path "$LEGACY_ADMIN_TARGET_REL")"
+  parent_path="$(dirname -- "$path")"
+  [[ -f "$target_path" && ! -L "$target_path" ]] ||
+    fail "El destino del alias heredado debe ser un archivo regular: $target_path"
+
+  # A normal installation runs as root. In a root-prefix test, the fixture
+  # belongs to the test runner, so validate against that isolated owner.
+  expected_uid=0
+  [[ -z "$ROOT_PREFIX" ]] || expected_uid="$EUID"
+  target_uid="$(stat -c '%u' -- "$target_path")"
+  target_mode="$(stat -c '%a' -- "$target_path")"
+  target_links="$(stat -c '%h' -- "$target_path")"
+  [[ "$target_uid" == "$expected_uid" ]] ||
+    fail "El destino del alias heredado no pertenece al usuario esperado: $target_path"
+  (( (8#$target_mode & 0022) == 0 && (8#$target_mode & 07000) == 0 && (8#$target_mode & 0100) != 0 )) ||
+    fail "El destino del alias heredado debe ser ejecutable por su propietario y no escribible por grupo u otros: $target_path"
+  root_boundary="${ROOT_PREFIX:-/}"
+  root_boundary="$(cd -- "$root_boundary" && pwd -P)"
+  while :; do
+    parent_uid="$(stat -c '%u' -- "$parent_path")"
+    parent_mode="$(stat -c '%a' -- "$parent_path")"
+    [[ "$parent_uid" == "$expected_uid" ]] ||
+      fail "Un directorio del alias heredado no pertenece al usuario esperado: $parent_path"
+    (( (8#$parent_mode & 0022) == 0 )) ||
+      fail "Un directorio del alias heredado no puede ser escribible por grupo u otros: $parent_path"
+    [[ "$parent_path" == "$root_boundary" ]] && break
+    [[ "$parent_path" == / ]] && fail 'No se pudo confinar la comprobación del alias heredado al root prefix'
+    parent_path="$(dirname -- "$parent_path")"
+  done
+  [[ "$target_links" == 1 ]] || fail "No se permite un destino heredado con enlaces físicos: $target_path"
+}
+assert_safe_managed_leaf() {
+  local path="$1"
+  if [[ "$path" == "$(root_path "$LEGACY_ADMIN_ALIAS_REL")" && -L "$path" ]]; then
+    assert_safe_legacy_admin_alias "$path"
+  else
+    assert_safe_leaf "$path"
+  fi
+}
 
 # Check every parent before reading configuration or creating backup/staging
 # files. This also confines the root-prefix test harness when its tree is
@@ -155,7 +204,7 @@ for rel in \
   etc/systemd/system/server-dashboard-web.service \
   etc/systemd/system/server-dashboard-collector.service \
   etc/systemd/system/server-dashboard-collector.timer; do
-  assert_safe_leaf "$(root_path "$rel")"
+  assert_safe_managed_leaf "$(root_path "$rel")"
 done
 WEB="$(root_path "$WEB_REL")"
 BIN="$(root_path "$BIN_REL")"
@@ -200,6 +249,7 @@ managed = {
     'usr/local/sbin/server-dashboard-live.py',
     'usr/local/sbin/server-dashboard-admin.py',
     'usr/local/sbin/miura-panel-admin-setup',
+    'usr/local/sbin/spanish-empire-panel-admin-setup',
     'usr/local/sbin/sep-admin-fleet.py',
     'usr/local/sbin/miura-panel-fleet',
     'usr/local/sbin/miura-panel-fleet-docker',
@@ -258,6 +308,12 @@ with tempfile.TemporaryDirectory(prefix='miura-rollback-') as temp_name:
                 if path.is_dir(): path.chmod(0o750)
                 elif path.is_file(): path.chmod(0o755 if path.stat().st_mode & 0o111 else 0o644)
     for rel in managed:
+        # The Spanish command name is included only to restore the validated
+        # inherited symlink case. In ordinary installations it may be an
+        # independent, unmanaged command, so preserve it when absent from the
+        # backup archive.
+        if rel == 'usr/local/sbin/spanish-empire-panel-admin-setup' and rel not in seen:
+            continue
         dest = root.joinpath(*pathlib.PurePosixPath(rel).parts)
         if dest.is_symlink() or dest.is_file(): dest.unlink()
         elif dest.is_dir(): shutil.rmtree(dest)
@@ -321,27 +377,55 @@ for parent, dirs, files in os.walk(root, followlinks=False):
 PY
 STAMP="$(date -u +%Y%m%dT%H%M%SZ)"
 BACKUP="$(mktemp -d "$BACKUPS/$STAMP.XXXXXX")" || fail 'No se pudo reservar un directorio de copia único'
+# The one documented legacy alias is accepted only after the strict check
+# above. Snapshot its trusted referent as a regular file under the managed
+# alias name so rollback never has to extract a symlink from a backup archive.
+LEGACY_ADMIN_ALIAS_PATH="$(root_path "$LEGACY_ADMIN_ALIAS_REL")"
+LEGACY_ADMIN_ALIAS_SNAPSHOT=''
+if [[ -L "$LEGACY_ADMIN_ALIAS_PATH" ]]; then
+  assert_safe_legacy_admin_alias "$LEGACY_ADMIN_ALIAS_PATH"
+  LEGACY_ADMIN_ALIAS_SNAPSHOT="$BACKUP/.miura-panel-admin-setup.snapshot"
+  cp -p -- "$(root_path "$LEGACY_ADMIN_TARGET_REL")" "$LEGACY_ADMIN_ALIAS_SNAPSHOT" || {
+    rm -rf "$BACKUP"
+    fail 'No se pudo preparar la copia segura del alias heredado'
+  }
+fi
 # Back up app files, deployed helpers, and service definitions. The config
 # (including selected mode) is persistent and is never rewritten on upgrades.
-tar -czf "$BACKUP/panel-backup.tar.gz" -C "${ROOT_PREFIX:-/}" \
-  --ignore-failed-read "${WEB_REL#/}" \
-  etc/systemd/system/server-dashboard-web.service \
-  etc/systemd/system/server-dashboard-collector.service \
-  etc/systemd/system/server-dashboard-collector.timer \
-  usr/local/sbin/server-dashboard-collect.py \
-  usr/local/sbin/server-dashboard-live.py \
-  usr/local/sbin/server-dashboard-admin.py \
-  usr/local/sbin/miura-panel-admin-setup \
-  usr/local/sbin/sep-admin-fleet.py \
-  usr/local/sbin/miura-panel-fleet \
-  usr/local/sbin/miura-panel-fleet-docker \
-  usr/local/sbin/spanish-empire-panel-fleet-receiver \
-  usr/local/sbin/server-dashboard-docker-action.py \
-  usr/local/sbin/server-dashboard-docker-updates.py \
-  usr/local/sbin/spanish-empire-panel-update 2>/dev/null || {
+BACKUP_PATHS=(
+  "${WEB_REL#/}"
+  etc/systemd/system/server-dashboard-web.service
+  etc/systemd/system/server-dashboard-collector.service
+  etc/systemd/system/server-dashboard-collector.timer
+  usr/local/sbin/server-dashboard-collect.py
+  usr/local/sbin/server-dashboard-live.py
+  usr/local/sbin/server-dashboard-admin.py
+  usr/local/sbin/sep-admin-fleet.py
+  usr/local/sbin/miura-panel-fleet
+  usr/local/sbin/miura-panel-fleet-docker
+  usr/local/sbin/spanish-empire-panel-fleet-receiver
+  usr/local/sbin/server-dashboard-docker-action.py
+  usr/local/sbin/server-dashboard-docker-updates.py
+  usr/local/sbin/spanish-empire-panel-update
+)
+if [[ -z "$LEGACY_ADMIN_ALIAS_SNAPSHOT" ]]; then
+  BACKUP_PATHS+=(usr/local/sbin/miura-panel-admin-setup)
+else
+  # Preserve both legacy entry points' pre-upgrade contents. The symlink
+  # itself is snapshotted as a regular alias member below.
+  BACKUP_PATHS+=(usr/local/sbin/spanish-empire-panel-admin-setup)
+fi
+TAR_ARGS=(-czf "$BACKUP/panel-backup.tar.gz" -C "${ROOT_PREFIX:-/}" --ignore-failed-read "${BACKUP_PATHS[@]}")
+if [[ -n "$LEGACY_ADMIN_ALIAS_SNAPSHOT" ]]; then
+  TAR_ARGS+=(-C "$BACKUP" '--transform=s|^\.miura-panel-admin-setup\.snapshot$|usr/local/sbin/miura-panel-admin-setup|' .miura-panel-admin-setup.snapshot)
+fi
+tar "${TAR_ARGS[@]}" 2>/dev/null || {
     rm -rf "$BACKUP"
     fail 'No se pudo crear la copia previa; instalación cancelada'
   }
+if [[ -n "$LEGACY_ADMIN_ALIAS_SNAPSHOT" ]]; then
+  rm -f -- "$LEGACY_ADMIN_ALIAS_SNAPSHOT"
+fi
 if [[ -f "$CONF" ]]; then
   cp -p "$CONF" "$BACKUP/server-dashboard.conf"
   chmod 0600 "$BACKUP/server-dashboard.conf"
@@ -428,7 +512,13 @@ declare -A ALIASES=(
 )
 for src in "${!ALIASES[@]}"; do
   [[ -f "$SCRIPT_DIR/$src" ]] || continue
-  install -m 0750 "$SCRIPT_DIR/$src" "$BIN/${ALIASES[$src]}"
+  if [[ "$src" == admin-setup.py && -n "$LEGACY_ADMIN_ALIAS_SNAPSHOT" ]]; then
+    # Keep the documented legacy link and update its referent; both the
+    # Miura and Spanish command names remain aliases to the same new program.
+    install -m 0750 "$SCRIPT_DIR/$src" "$(root_path "$LEGACY_ADMIN_TARGET_REL")"
+  else
+    install -m 0750 "$SCRIPT_DIR/$src" "$BIN/${ALIASES[$src]}"
+  fi
 done
 
 if [[ ! -f "$CONF" ]]; then

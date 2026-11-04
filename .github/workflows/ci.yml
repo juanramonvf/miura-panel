@@ -5,10 +5,12 @@ on:
     branches:
       - main
       - development/v1.0.35-candidate
+      - development/v1.0.36-candidate
   pull_request:
     branches:
       - main
       - development/v1.0.35-candidate
+      - development/v1.0.36-candidate
   workflow_dispatch:
 
 permissions:
