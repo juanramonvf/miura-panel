@@ -227,7 +227,8 @@ class WebServicePermissionTests(unittest.TestCase):
         for old_version in ("1.0.34", "1.0.36"):
             with self.subTest(old_version=old_version), tempfile.TemporaryDirectory(
                     prefix=f"miura-web-upgrade-{old_version}-") as temp:
-                os.chmod(temp, 0o755)
+                os.chown(temp, 0, grp.getgrnam("www-data").gr_gid)
+                os.chmod(temp, 0o710)
                 prefix = pathlib.Path(temp) / "root"
                 self.run_installer(OLD_INSTALLER, prefix, "--demo")
                 (prefix / WEB_REL / "version.json").write_text(
@@ -294,7 +295,8 @@ class WebServicePermissionTests(unittest.TestCase):
         www_gid = grp.getgrnam("www-data").gr_gid
         prefs_gid = named_prefs_gid() or www_gid
         with tempfile.TemporaryDirectory(prefix="miura-web-www-data-") as temp:
-            os.chmod(temp, 0o755)
+            os.chown(temp, 0, www_gid)
+            os.chmod(temp, 0o710)
             prefix = pathlib.Path(temp) / "root"
             self.run_installer(INSTALLER, prefix, "--demo")
             self.assert_service_contract(prefix)
