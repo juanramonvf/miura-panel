@@ -10,6 +10,7 @@ CONF_REL='etc/server-dashboard.conf'
 STATE_REL='var/lib/server-dashboard'
 PREFS_REL="$STATE_REL/preferences"
 PREFS_FILE_REL="$PREFS_REL/ui.json"
+READ_GROUP='server-dashboard-read'
 ADMIN_UNIT_REL='etc/systemd/system/server-dashboard-admin.service'
 ADMIN_DROPIN_REL='etc/systemd/system/server-dashboard-admin.service.d'
 ADMIN_DROPIN_FILE_REL="$ADMIN_DROPIN_REL/miura-preferences.conf"
@@ -248,8 +249,10 @@ elif systemctl cat server-dashboard-admin.service >/dev/null 2>&1; then
   ADMIN_UNIT_PRESENT=1
 fi
 if ((ADMIN_UNIT_PRESENT)) && [[ -e "$(root_path "$ADMIN_DROPIN_FILE_REL")" ]]; then
-  printf '[Service]\nSupplementaryGroups=server-dashboard-prefs\nReadWritePaths=/var/lib/server-dashboard/preferences\n' |
+  printf '[Service]\nSupplementaryGroups=server-dashboard-prefs\nSupplementaryGroups=%s\nReadWritePaths=/var/lib/server-dashboard/preferences\n' "$READ_GROUP" |
     cmp -s - "$(root_path "$ADMIN_DROPIN_FILE_REL")" ||
+    printf '[Service]\nSupplementaryGroups=server-dashboard-prefs\nReadWritePaths=/var/lib/server-dashboard/preferences\n' |
+      cmp -s - "$(root_path "$ADMIN_DROPIN_FILE_REL")" ||
     fail 'El drop-in de preferencias de server-dashboard-admin.service contiene cambios no gestionados; no se sobrescribirá'
 fi
 if ((ADMIN_UNIT_PRESENT)); then
@@ -268,10 +271,62 @@ if [[ -z "$ROOT_PREFIX" ]] && ! getent group server-dashboard-prefs >/dev/null; 
   command -v groupadd >/dev/null || fail 'Falta groupadd para crear el grupo server-dashboard-prefs'
   groupadd --system server-dashboard-prefs || fail 'No se pudo crear el grupo server-dashboard-prefs'
 fi
+if [[ -z "$ROOT_PREFIX" ]] && ! getent group "$READ_GROUP" >/dev/null; then
+  command -v groupadd >/dev/null || fail "Falta groupadd para crear el grupo $READ_GROUP"
+  groupadd --system "$READ_GROUP" || fail "No se pudo crear el grupo $READ_GROUP"
+fi
 if [[ -z "$ROOT_PREFIX" ]]; then
   PREFS_GROUP_ENTRY="$(getent group server-dashboard-prefs)" || fail 'No se encuentra el grupo server-dashboard-prefs'
   PREFS_GROUP_MEMBERS="${PREFS_GROUP_ENTRY##*:}"
   [[ -z "$PREFS_GROUP_MEMBERS" ]] || fail 'El grupo server-dashboard-prefs debe ser exclusivo y no tener miembros añadidos'
+  READ_GROUP_ENTRY="$(getent group "$READ_GROUP")" || fail "No se encuentra el grupo $READ_GROUP"
+  READ_GROUP_MEMBERS="${READ_GROUP_ENTRY##*:}"
+  [[ -z "$READ_GROUP_MEMBERS" ]] || fail "El grupo $READ_GROUP debe estar vacío; solo se concede por las unidades systemd gestionadas"
+  READ_GID="$(cut -d: -f3 <<< "$READ_GROUP_ENTRY")"
+else
+  # Isolated root-prefix runs do not create host groups. Reuse www-data's
+  # numeric gid solely inside the fixture so effective traversal can be tested.
+  READ_GID="$(getent group "$READ_GROUP" | cut -d: -f3 || true)"
+  if [[ -z "$READ_GID" ]]; then READ_GID="$(getent group www-data | cut -d: -f3 || true)"; fi
+fi
+prepare_web_parent() {
+  local boundary current_parent parent_uid parent_gid parent_mode
+  local -a missing=()
+  WEB_PARENT="$(root_path "$(dirname "$WEB_REL")")"
+  boundary="${ROOT_PREFIX:-/}"
+  boundary="$(cd -- "$boundary" && pwd -P)"
+  current_parent="$WEB_PARENT"
+  while [[ ! -d "$current_parent" ]]; do
+    [[ "$current_parent" != "$boundary" && "$current_parent" != / ]] ||
+      fail "No se pudo crear el directorio web accesible: $WEB_PARENT"
+    missing+=("$current_parent")
+    current_parent="$(dirname -- "$current_parent")"
+  done
+  for ((index=${#missing[@]}-1; index>=0; index--)); do
+    if [[ -z "$ROOT_PREFIX" ]]; then
+      install -d -o root -g root -m 0755 "${missing[index]}" ||
+        fail "No se pudo crear el directorio web accesible: ${missing[index]}"
+    else
+      install -d -m 0755 "${missing[index]}" ||
+        fail "No se pudo crear el directorio web de la prueba: ${missing[index]}"
+    fi
+  done
+  current_parent="$WEB_PARENT"
+  while :; do
+    parent_uid="$(stat -c '%u' -- "$current_parent")"
+    parent_gid="$(stat -c '%g' -- "$current_parent")"
+    parent_mode="$(stat -c '%a' -- "$current_parent")"
+    [[ "$parent_uid" == 0 ]] || fail "El directorio padre web no pertenece a root: $current_parent"
+    (( (8#$parent_mode & 0022) == 0 )) || fail "El directorio padre web permite escritura no confiable: $current_parent"
+    if (( (8#$parent_mode & 0001) == 0 && !(parent_gid == READ_GID && (8#$parent_mode & 0010) != 0) )); then
+      fail "www-data y el servicio admin no pueden atravesar el directorio padre web: $current_parent"
+    fi
+    [[ "$current_parent" == "$boundary" ]] && break
+    current_parent="$(dirname -- "$current_parent")"
+  done
+}
+if [[ -z "$ROOT_PREFIX" || "${MIURA_TEST_WEB_PARENT_CHECK:-}" == 1 ]]; then
+  prepare_web_parent
 fi
 WEB="$(root_path "$WEB_REL")"
 BIN="$(root_path "$BIN_REL")"
@@ -302,11 +357,12 @@ if ((ROLLBACK_REQUESTED)); then
   ARCHIVE="$ROLLBACK/panel-backup.tar.gz"
   assert_safe_leaf "$ARCHIVE"
   [[ -f "$ARCHIVE" ]] || fail 'No existe una copia regular panel-backup.tar.gz'
-  python3 - "$ARCHIVE" "${ROOT_PREFIX:-/}" <<'PY'
+  python3 - "$ARCHIVE" "${ROOT_PREFIX:-/}" "${READ_GID:--1}" <<'PY'
 import os, pathlib, shutil, sys, tarfile, tempfile
 import grp
 archive = pathlib.Path(sys.argv[1])
 root = pathlib.Path(sys.argv[2]).resolve()
+read_gid = int(sys.argv[3])
 web_rel = pathlib.PurePosixPath('var/www/server-dashboard')
 managed = {
     'etc/systemd/system/server-dashboard-web.service',
@@ -368,12 +424,11 @@ with tempfile.TemporaryDirectory(prefix='miura-rollback-') as temp_name:
     if backup_web.exists():
         web.parent.mkdir(parents=True, exist_ok=True)
         shutil.copytree(backup_web, web, symlinks=False)
-        if root == pathlib.Path('/'):
-            www_gid = grp.getgrnam('www-data').gr_gid
+        if os.geteuid() == 0 and read_gid >= 0:
             for path in [web, *web.rglob('*')]:
-                os.chown(path, 0, www_gid)
+                os.chown(path, 0, read_gid)
                 if path.is_dir(): path.chmod(0o750)
-                elif path.is_file(): path.chmod(0o755 if path.stat().st_mode & 0o111 else 0o644)
+                elif path.is_file(): path.chmod(0o750 if path.stat().st_mode & 0o111 else 0o640)
     for rel in managed:
         # The Spanish command name is included only to restore the validated
         # inherited symlink case. In ordinary installations it may be an
@@ -392,14 +447,24 @@ with tempfile.TemporaryDirectory(prefix='miura-rollback-') as temp_name:
             if rel == 'usr/local/sbin/server-dashboard-live.py':
                 mode = 0o750
             dest.chmod(mode)
-            if os.geteuid() == 0 and rel == 'usr/local/sbin/server-dashboard-live.py':
-                os.chown(dest, 0, grp.getgrnam('www-data').gr_gid)
+            if os.geteuid() == 0 and read_gid >= 0 and rel in {
+                'usr/local/sbin/server-dashboard-live.py',
+                'usr/local/sbin/server-dashboard-admin.py',
+                'usr/local/sbin/sep-admin-fleet.py',
+            }:
+                os.chown(dest, 0, read_gid)
+                dest.chmod(0o750)
+    if os.geteuid() == 0 and read_gid >= 0:
+        conf = root / 'etc/server-dashboard.conf'
+        if conf.is_file() and not conf.is_symlink():
+            os.chown(conf, 0, read_gid)
+            conf.chmod(0o640)
     # Keep service sandbox permissions after rolling back to an older backup.
     # The web process still needs its preferences write exception and group;
     # the collector is confined to the two trees it owns as generated output.
     for rel, required in {
         'etc/systemd/system/server-dashboard-web.service': {
-            'SupplementaryGroups': 'server-dashboard-prefs',
+            'SupplementaryGroups': 'server-dashboard-prefs server-dashboard-read',
             'ProtectSystem': 'strict',
             'ProtectHome': 'true',
             'ReadWritePaths': '/var/lib/server-dashboard/preferences',
@@ -638,8 +703,9 @@ for src in "${!ALIASES[@]}"; do
     # Keep the documented legacy link and update its referent; both the
     # Miura and Spanish command names remain aliases to the same new program.
     install -m 0750 "$SCRIPT_DIR/$src" "$(root_path "$LEGACY_ADMIN_TARGET_REL")"
-  elif [[ "$src" == live.py && ( -z "$ROOT_PREFIX" || $EUID -eq 0 ) ]]; then
-    install -o root -g www-data -m 0750 "$SCRIPT_DIR/$src" "$BIN/${ALIASES[$src]}"
+  elif [[ "$src" == live.py || "$src" == admin-web.py || "$src" == admin-fleet.py ]] &&
+       (( EUID == 0 )) && [[ -n "$READ_GID" ]]; then
+    install -o root -g "$READ_GID" -m 0750 "$SCRIPT_DIR/$src" "$BIN/${ALIASES[$src]}"
   else
     install -m 0750 "$SCRIPT_DIR/$src" "$BIN/${ALIASES[$src]}"
   fi
@@ -700,10 +766,23 @@ finally:
     except FileNotFoundError: pass
 PY
 fi
-if [[ -z "$ROOT_PREFIX" ]]; then chown root:www-data "$CONF"; fi
+if (( EUID == 0 )) && [[ -n "$READ_GID" ]]; then chown "root:$READ_GID" "$CONF"; fi
 chmod 0640 "$CONF"
-if [[ -z "$ROOT_PREFIX" ]]; then chown -R root:www-data "$WEB"; fi
-chmod 0750 "$WEB"
+if (( EUID == 0 )) && [[ -n "$READ_GID" ]]; then
+  chown -R "root:$READ_GID" "$WEB"
+  python3 - "$WEB" <<'PY'
+import pathlib, sys
+root = pathlib.Path(sys.argv[1])
+for path in [root, *root.rglob('*')]:
+    if path.is_symlink():
+        raise SystemExit('El árbol web contiene un enlace simbólico: '+str(path))
+    if path.is_dir(): path.chmod(0o750)
+    elif path.is_file(): path.chmod(0o640)
+    else: raise SystemExit('El árbol web contiene un archivo especial: '+str(path))
+PY
+else
+  chmod 0750 "$WEB"
+fi
 
 mkdir -p "$(root_path etc/systemd/system)"
 cat > "$(root_path etc/systemd/system/server-dashboard-web.service)" <<'EOF'
@@ -715,7 +794,7 @@ After=network.target
 Type=simple
 User=www-data
 Group=www-data
-SupplementaryGroups=server-dashboard-prefs
+SupplementaryGroups=server-dashboard-prefs server-dashboard-read
 ExecStart=/usr/bin/python3 /usr/local/sbin/server-dashboard-live.py
 Restart=on-failure
 RestartSec=3
@@ -772,12 +851,7 @@ if ((ADMIN_UNIT_PRESENT)); then
   mkdir -p "$ADMIN_DROPIN_DIR"
   assert_safe_root_owned_chain "$ADMIN_DROPIN_DIR"
   ADMIN_DROPIN_TMP="$(mktemp "$ADMIN_DROPIN_DIR/.miura-preferences.XXXXXX")" || fail 'No se pudo preparar el drop-in seguro'
-  if ! cat > "$ADMIN_DROPIN_TMP" <<'EOF'
-[Service]
-SupplementaryGroups=server-dashboard-prefs
-ReadWritePaths=/var/lib/server-dashboard/preferences
-EOF
-  then
+  if ! printf '[Service]\nSupplementaryGroups=server-dashboard-prefs\nSupplementaryGroups=%s\nReadWritePaths=/var/lib/server-dashboard/preferences\n' "$READ_GROUP" > "$ADMIN_DROPIN_TMP"; then
     rm -f -- "$ADMIN_DROPIN_TMP"
     fail 'No se pudo escribir el drop-in seguro'
   fi

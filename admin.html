@@ -531,7 +531,7 @@ if(location.pathname==='/docker-ssh'){
 /* Sondeo independiente del trabajo de actualización (systemd): si Miura
    se reinicia, esperamos que vuelva a servir la nueva versión antes de recargar. */
 (()=>{
-  const installedAtLoad='1.0.31';
+  const installedAtLoad='1.0.38';
   let checking=false, refreshing=false;
   async function checkReload(){
     if(!expectVersionChange||checking||refreshing)return;

@@ -37,6 +37,7 @@ UNIT_REL = pathlib.Path("etc/systemd/system/server-dashboard-web.service")
 COLLECTOR_UNIT_REL = pathlib.Path("etc/systemd/system/server-dashboard-collector.service")
 ADMIN_UNIT_REL = pathlib.Path("etc/systemd/system/server-dashboard-admin.service")
 PREFS_GROUP = "server-dashboard-prefs"
+READ_GROUP = "server-dashboard-read"
 
 
 def setpriv_available():
@@ -62,6 +63,13 @@ def named_prefs_gid():
         return None
 
 
+def read_group_gid():
+    try:
+        return grp.getgrnam(READ_GROUP).gr_gid
+    except KeyError:
+        return grp.getgrnam("www-data").gr_gid
+
+
 def legacy_group_gid():
     try:
         return grp.getgrnam("server-dashboard").gr_gid
@@ -75,9 +83,11 @@ class WebServicePermissionTests(unittest.TestCase):
         if not INSTALLER.is_file():
             raise AssertionError(f"Falta el instalador candidato: {INSTALLER}")
 
-    def run_installer(self, installer, prefix, *args):
+    def run_installer(self, installer, prefix, *args, extra_env=None):
         env = os.environ.copy()
         env["MIURA_ROOT_PREFIX"] = str(prefix)
+        if extra_env:
+            env.update(extra_env)
         result = subprocess.run(
             ["bash", str(installer), *args],
             cwd=ROOT,
@@ -96,11 +106,33 @@ class WebServicePermissionTests(unittest.TestCase):
         self.assertTrue(live.is_file() and not live.is_symlink())
         self.assertEqual(live.stat().st_mode & 0o777, 0o750)
         self.assertEqual(live.stat().st_uid, 0)
-        self.assertEqual(live.stat().st_gid, grp.getgrnam("www-data").gr_gid)
+        self.assertEqual(live.stat().st_gid, read_group_gid())
+        for helper in ("server-dashboard-admin.py", "sep-admin-fleet.py"):
+            path = prefix / "usr/local/sbin" / helper
+            self.assertEqual(path.stat().st_uid, 0)
+            self.assertEqual(path.stat().st_gid, read_group_gid())
+            self.assertEqual(path.stat().st_mode & 0o777, 0o750)
+        conf = (prefix / CONF_REL).stat()
+        self.assertEqual(conf.st_uid, 0)
+        self.assertEqual(conf.st_gid, read_group_gid())
+        self.assertEqual(conf.st_mode & 0o777, 0o640)
+        web = (prefix / WEB_REL).stat()
+        self.assertEqual(web.st_uid, 0)
+        self.assertEqual(web.st_gid, read_group_gid())
+        self.assertEqual(web.st_mode & 0o777, 0o750)
+        for path in (prefix / WEB_REL).rglob("*"):
+            st = path.lstat()
+            self.assertFalse(path.is_symlink(), path)
+            self.assertEqual(st.st_gid, read_group_gid(), path)
+            self.assertFalse(st.st_mode & 0o007, path)
+            if path.is_dir():
+                self.assertEqual(st.st_mode & 0o777, 0o750, path)
+            else:
+                self.assertEqual(st.st_mode & 0o777, 0o640, path)
         unit = (prefix / UNIT_REL).read_text(encoding="utf-8")
         self.assertIn("User=www-data\n", unit)
         self.assertIn("Group=www-data\n", unit)
-        self.assertIn(f"SupplementaryGroups={PREFS_GROUP}\n", unit)
+        self.assertIn(f"SupplementaryGroups={PREFS_GROUP} {READ_GROUP}\n", unit)
         self.assertIn("ProtectSystem=strict\n", unit)
         writes = [line.split("=", 1)[1] for line in unit.splitlines()
                   if line.startswith("ReadWritePaths=")]
@@ -137,6 +169,23 @@ class WebServicePermissionTests(unittest.TestCase):
         content = dropins[0].read_text(encoding="utf-8")
         self.assertIn("[Service]\n", content)
         self.assertIn("SupplementaryGroups=server-dashboard-prefs\n", content)
+        self.assertIn(f"SupplementaryGroups={READ_GROUP}\n", content)
+        analyzer = shutil.which("systemd-analyze")
+        if analyzer:
+            service = (
+                "[Unit]\nDescription=Miura admin drop-in syntax test\n\n"
+                "[Service]\nUser=root\nExecStart=/usr/bin/true\n"
+                + "".join(line + "\n" for line in content.splitlines()[1:])
+            )
+            with tempfile.NamedTemporaryFile("w", suffix=".service", encoding="utf-8") as check:
+                check.write(service)
+                check.flush()
+                result = subprocess.run(
+                    [analyzer, "verify", check.name], capture_output=True,
+                    text=True, timeout=10, check=False,
+                )
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertNotIn("Unknown key", result.stderr)
         writes = [line.split("=", 1)[1] for line in content.splitlines()
                   if line.startswith("ReadWritePaths=")]
         self.assertEqual(writes, ["/var/lib/server-dashboard/preferences"])
@@ -149,6 +198,98 @@ class WebServicePermissionTests(unittest.TestCase):
             self.run_installer(INSTALLER, prefix, "--demo")
             self.assert_service_contract(prefix)
             self.assert_admin_preferences_dropin(prefix, expected=False)
+
+    @unittest.skipUnless(ROOT_PERMISSION_TESTS and setpriv_available(),
+                         "requiere root y setpriv para probar permisos efectivos con otro UID")
+    def test_admin_runtime_group_can_read_all_required_paths_without_other_access(self):
+        nobody = pwd.getpwnam("nobody")
+        nogroup = grp.getgrnam("nogroup")
+        read_gid = read_group_gid()
+        with tempfile.TemporaryDirectory(prefix="miura-admin-read-access-") as temp:
+            os.chown(temp, nobody.pw_uid, read_gid)
+            os.chmod(temp, 0o710)
+            prefix = pathlib.Path(temp) / "root"
+            admin_unit = prefix / ADMIN_UNIT_REL
+            admin_unit.parent.mkdir(parents=True, exist_ok=True)
+            admin_unit.write_text(
+                "[Unit]\nDescription=Isolated sep-admin fixture\n\n"
+                "[Service]\nUser=sep-admin\nGroup=sep-admin\n"
+                "ExecStart=/usr/bin/python3 /usr/local/sbin/server-dashboard-admin.py\n",
+                encoding="utf-8",
+            )
+            self.run_installer(INSTALLER, prefix, "--demo")
+            self.assert_service_contract(prefix)
+            self.assert_admin_preferences_dropin(prefix, expected=True)
+            os.chown(prefix, 0, read_gid)
+            prefix.chmod(0o710)
+            # These are standard searchable ancestors on the target host; the
+            # installer fixture creates them privately by default.
+            for rel in ("var", "var/www", "usr", "usr/local", "usr/local/sbin"):
+                parent = prefix / rel
+                if parent.exists():
+                    parent.chmod(0o755)
+            paths = [
+                prefix / CONF_REL,
+                prefix / WEB_REL / "index.html",
+                prefix / "usr/local/sbin/server-dashboard-live.py",
+                prefix / "usr/local/sbin/server-dashboard-admin.py",
+                prefix / "usr/local/sbin/sep-admin-fleet.py",
+            ]
+            read_script = (
+                "from pathlib import Path; import sys; "
+                "[Path(p).read_bytes() for p in sys.argv[1:]]"
+            )
+            result = subprocess.run(
+                [shutil.which("setpriv"), f"--reuid={nobody.pw_uid}",
+                 f"--regid={nogroup.gr_gid}", f"--groups={read_gid}",
+                 sys.executable, "-c", read_script, *map(str, paths)],
+                capture_output=True, text=True, timeout=10, check=False,
+            )
+            if result.returncode:
+                details = "\n".join(
+                    f"{path}: {path.stat().st_uid}:{path.stat().st_gid} "
+                    f"{path.stat().st_mode & 0o777:o}"
+                    for target in paths for path in [target, *target.parents]
+                    if path.exists()
+                )
+                identity = subprocess.run(
+                    [shutil.which("setpriv"), f"--reuid={nobody.pw_uid}",
+                     f"--regid={nogroup.gr_gid}", f"--groups={read_gid}", "id"],
+                    capture_output=True, text=True, check=False,
+                )
+                self.fail(f"{result.stderr}\n{identity.stdout}\n{details}")
+
+    @unittest.skipUnless(ROOT_PERMISSION_TESTS,
+                         "requiere root para validar creación de ancestros web aislados")
+    def test_missing_web_parent_is_created_searchable_and_private_parent_fails_closed(self):
+        read_gid = read_group_gid()
+        for restrictive in (False, True):
+            with self.subTest(restrictive_parent=restrictive), tempfile.TemporaryDirectory(
+                    prefix="miura-web-parent-check-") as temp:
+                os.chown(temp, pwd.getpwnam("nobody").pw_uid, read_gid)
+                os.chmod(temp, 0o710)
+                prefix = pathlib.Path(temp) / "root"
+                prefix.mkdir()
+                os.chown(prefix, 0, read_gid)
+                prefix.chmod(0o710)
+                if restrictive:
+                    (prefix / "var").mkdir(mode=0o750)
+                result = subprocess.run(
+                    ["bash", str(INSTALLER), "--demo"], cwd=ROOT,
+                    env={**os.environ, "MIURA_ROOT_PREFIX": str(prefix),
+                         "MIURA_TEST_WEB_PARENT_CHECK": "1"},
+                    capture_output=True, text=True, timeout=90, check=False,
+                )
+                if restrictive:
+                    self.assertNotEqual(result.returncode, 0, result.stdout)
+                    self.assertIn("no pueden atravesar", result.stderr)
+                    self.assertFalse((prefix / WEB_REL / "version.json").exists())
+                else:
+                    self.assertEqual(result.returncode, 0, result.stderr)
+                    for rel in ("var", "var/www"):
+                        parent = (prefix / rel).stat()
+                        self.assertEqual(parent.st_mode & 0o777, 0o755)
+                        self.assertEqual(parent.st_uid, 0)
 
     @unittest.skipUnless(ROOT_PERMISSION_TESTS,
                          "requiere UID 0 para ejecutar instaladores en el prefijo temporal")
@@ -175,6 +316,7 @@ class WebServicePermissionTests(unittest.TestCase):
             self.run_installer(INSTALLER, prefix, "--rollback")
             self.assertEqual(admin_unit.read_text(encoding="utf-8"), original)
             self.assert_admin_preferences_dropin(prefix, expected=True)
+            self.assert_service_contract(prefix)
 
     @unittest.skipUnless(ROOT_PERMISSION_TESTS,
                          "requiere UID 0 para probar rutas gestionadas en un prefijo aislado")
@@ -277,7 +419,7 @@ class WebServicePermissionTests(unittest.TestCase):
                     [shutil.which("setpriv"),
                      f"--reuid={pwd.getpwnam('www-data').pw_uid}",
                      f"--regid={grp.getgrnam('www-data').gr_gid}",
-                     f"--groups={prefs_gid}",
+                     f"--groups={prefs_gid},{read_group_gid()}",
                      sys.executable, "-c",
                      "from pathlib import Path; print(Path(__import__('sys').argv[1]).read_text())",
                      str(old_ui)],
@@ -288,6 +430,31 @@ class WebServicePermissionTests(unittest.TestCase):
                 self.run_installer(INSTALLER, prefix, "--rollback")
                 self.assert_service_contract(prefix)
                 self.assertEqual(json.loads((prefix / WEB_REL / "version.json").read_text())["version"], old_version)
+                os.chown(temp, pwd.getpwnam("nobody").pw_uid, read_group_gid())
+                os.chmod(temp, 0o710)
+                os.chown(prefix, 0, read_group_gid())
+                prefix.chmod(0o710)
+                for rel in ("etc", "var", "var/www", "usr", "usr/local", "usr/local/sbin"):
+                    parent = prefix / rel
+                    if parent.exists(): parent.chmod(0o755)
+                readable_after_rollback = [
+                    prefix / CONF_REL, prefix / WEB_REL / "index.html",
+                    prefix / LIVE_REL,
+                    prefix / "usr/local/sbin/server-dashboard-admin.py",
+                    prefix / "usr/local/sbin/sep-admin-fleet.py",
+                ]
+                nobody = pwd.getpwnam("nobody")
+                nogroup = grp.getgrnam("nogroup")
+                read_after_rollback = subprocess.run(
+                    [shutil.which("setpriv"), f"--reuid={nobody.pw_uid}",
+                     f"--regid={nogroup.gr_gid}",
+                     f"--groups={read_group_gid()}", sys.executable, "-c",
+                     "from pathlib import Path; import sys; [Path(p).read_bytes() for p in sys.argv[1:]]",
+                     *map(str, readable_after_rollback)],
+                    capture_output=True, text=True, timeout=10, check=False,
+                )
+                self.assertEqual(read_after_rollback.returncode, 0,
+                                 read_after_rollback.stderr)
 
     @unittest.skipUnless(ROOT_PERMISSION_TESTS and setpriv_available(),
                          "requiere UID 0, setpriv y grupos del servicio para ejecutar como www-data")
