@@ -11,5 +11,5 @@
 ## Compatibilidad y verificación
 
 - Conserva `DASHBOARD_MODE=demo` y la configuración durante actualizaciones.
-- Incluye pruebas de instalación aislada, actualización desde .34/.36, rollback, acceso efectivo como UID de servicio, escritura de preferencias HTTP restringidas y regresión del refresco frontend.
+- Incluye pruebas de instalación aislada, actualización desde .36/.37, compatibilidad del contrato usado por el actualizador .34, rollback, acceso efectivo como UID de servicio, escritura de preferencias HTTP restringidas y regresión del refresco frontend.
 - Candidata de desarrollo. No publicar hasta completar las verificaciones automatizadas y revisión.

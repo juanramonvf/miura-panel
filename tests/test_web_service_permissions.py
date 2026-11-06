@@ -28,6 +28,7 @@ INSTALLER = pathlib.Path(os.environ.get(
     DIST / f"install-spanish-empire-panel-v{VERSION}.sh",
 )).resolve()
 OLD_INSTALLER = DIST / "install-spanish-empire-panel-v1.0.36.sh"
+V1037_INSTALLER = DIST / "install-spanish-empire-panel-v1.0.37.sh"
 PREF_REL = pathlib.Path("var/lib/server-dashboard/preferences")
 STATE_REL = pathlib.Path("var/lib/server-dashboard")
 LIVE_REL = pathlib.Path("usr/local/sbin/server-dashboard-live.py")
@@ -258,6 +259,64 @@ class WebServicePermissionTests(unittest.TestCase):
                     capture_output=True, text=True, check=False,
                 )
                 self.fail(f"{result.stderr}\n{identity.stdout}\n{details}")
+
+    @unittest.skipUnless(ROOT_PERMISSION_TESTS and setpriv_available(),
+                         "requiere root y setpriv para probar la migración real desde v1.0.37")
+    def test_real_v1037_install_is_inaccessible_then_candidate_upgrade_repairs_it(self):
+        if not V1037_INSTALLER.is_file():
+            self.skipTest("no está disponible el instalador autocontenido v1.0.37")
+        nobody = pwd.getpwnam("nobody")
+        nogroup = grp.getgrnam("nogroup")
+        read_gid = read_group_gid()
+        with tempfile.TemporaryDirectory(prefix="miura-v1037-permissions-") as temp:
+            prefix = pathlib.Path(temp) / "root"
+            self.run_installer(V1037_INSTALLER, prefix, "--demo")
+            old_conf = (prefix / CONF_REL).stat()
+            old_web = (prefix / WEB_REL).stat()
+            old_fleet = (prefix / "usr/local/sbin/sep-admin-fleet.py").stat()
+            self.assertEqual((old_conf.st_gid, old_web.st_gid, old_fleet.st_gid), (0, 0, 0))
+            self.assertEqual(old_conf.st_mode & 0o777, 0o640)
+            self.assertEqual(old_web.st_mode & 0o777, 0o750)
+            self.assertEqual(old_fleet.st_mode & 0o777, 0o750)
+
+            admin_unit = prefix / ADMIN_UNIT_REL
+            admin_unit.write_text(
+                "[Unit]\nDescription=Legacy sep-admin service fixture\n\n"
+                "[Service]\nUser=sep-admin\nGroup=sep-admin\n"
+                "ExecStart=/usr/bin/python3 /usr/local/sbin/server-dashboard-admin.py\n",
+                encoding="utf-8",
+            )
+            os.chown(temp, nobody.pw_uid, read_gid)
+            os.chmod(temp, 0o710)
+            os.chown(prefix, 0, read_gid)
+            prefix.chmod(0o710)
+            for rel in ("etc", "var", "var/www", "usr", "usr/local", "usr/local/sbin"):
+                parent = prefix / rel
+                if parent.exists(): parent.chmod(0o755)
+            paths = [prefix / CONF_REL, prefix / WEB_REL / "index.html",
+                     prefix / "usr/local/sbin/sep-admin-fleet.py"]
+            read_script = (
+                "from pathlib import Path; import sys; "
+                "[Path(p).read_bytes() for p in sys.argv[1:]]"
+            )
+            old_read = subprocess.run(
+                [shutil.which("setpriv"), f"--reuid={nobody.pw_uid}",
+                 f"--regid={nogroup.gr_gid}", f"--groups={read_gid}",
+                 sys.executable, "-c", read_script, *map(str, paths)],
+                capture_output=True, text=True, timeout=10, check=False,
+            )
+            self.assertNotEqual(old_read.returncode, 0)
+
+            self.run_installer(INSTALLER, prefix, "--upgrade")
+            self.assert_service_contract(prefix)
+            self.assert_admin_preferences_dropin(prefix, expected=True)
+            fixed_read = subprocess.run(
+                [shutil.which("setpriv"), f"--reuid={nobody.pw_uid}",
+                 f"--regid={nogroup.gr_gid}", f"--groups={read_gid}",
+                 sys.executable, "-c", read_script, *map(str, paths)],
+                capture_output=True, text=True, timeout=10, check=False,
+            )
+            self.assertEqual(fixed_read.returncode, 0, fixed_read.stderr)
 
     @unittest.skipUnless(ROOT_PERMISSION_TESTS,
                          "requiere root para validar creación de ancestros web aislados")
