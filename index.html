@@ -743,7 +743,7 @@
   <div class="sep-brand-center">
     <img class="sep-brand-logo" src="/assets/sep-logo.png" alt="Miura Panel" width="42" height="42">
     <div class="sep-brand-stack">
-      <div class="miura-brand-title"><span class="sep-brand">Miura Panel</span><span class="sep-ver">v1.0.35</span></div>
+      <div class="miura-brand-title"><span class="sep-brand">Miura Panel</span><span class="sep-ver">v1.0.38</span></div>
       <div class="sep-brand-help"><a href="https://sep.mundopeke.es/ayuda.html" target="_blank" rel="noopener noreferrer" title="Manual completo de Miura Panel">? Ayuda</a><a href="https://sep.mundopeke.es/novedades.html" target="_blank" rel="noopener noreferrer" title="Historial de cambios">↻ Novedades</a></div>
     </div>
   </div>
@@ -905,7 +905,7 @@ function renderIdentity(d){
   bindIpCopyButtons();
 }
 
-const liveHistory=[];const MAX_POINTS=300;let slowData=null,dockerVersions=null;let dockerActionBusy=false,dockerActionTimer=null;let dockerFilterState='all',dockerFilterQuery='';
+const liveHistory=[];const MAX_POINTS=300;const CHART_REFRESH_EVERY=30;let liveSampleCount=0,lastChartRenderSample=0;let slowData=null,dockerVersions=null;let dockerActionBusy=false,dockerActionTimer=null;let dockerFilterState='all',dockerFilterQuery='';
 function pctState(v,kind='generic'){
   v=Number(v);if(!Number.isFinite(v))return '';
   if(kind==='disk')return v>=90?'bad':v>=75?'warn':'ok';
@@ -1302,19 +1302,65 @@ async function sepRenameDisk(key,defaultName){
   try{await sepWritePrefs('disk_aliases',sepRemoteDiskAliases);await loadLive();}
   catch(e){alert('No se ha guardado el nombre: '+e.message);await sepLoadPrefs();}
 }
-function renderLive(l){let cpuModel=slowData?.system?.cpu_model||'CPU';let cpuCount=slowData?.system?.cpu_count||'';$('#sub').innerHTML=`${esc(cpuModel)}${cpuCount?' · '+cpuCount+' hilos':''} · RAM ${hb(l.ram_total)}`;let cpuState=pctState(l.cpu),ramState=pctState(l.ram),cpuTempState=tempState(l.cpu_temp,'cpu');
-$('#metrics').innerHTML=
-`<div class="card"><div class="label">CPU</div><div class="metric status-value ${cpuState}">${esc(l.cpu)}%</div><div class="small">Carga ${esc(l.load1)} / ${esc(l.load5)} / ${esc(l.load15)}</div><div class="small sep-detail">Encendido: ${esc(formatUptime(l.uptime_seconds))}</div><div class="bar"><div class="fill ${cpuState}" style="width:${Math.min(100,Math.max(0,l.cpu))}%"></div></div></div>`+
-`<div class="card"><div class="label">RAM</div><div class="metric status-value ${ramState}">${esc(l.ram)}%</div><div class="small">${hb(l.ram_used)} / ${hb(l.ram_total)}</div><div class="small sep-detail">${Number(l.swap_total)>0?`Swap: ${hb(l.swap_used)} / ${hb(l.swap_total)} (${esc(l.swap_percent)}%)`:'Swap: no configurada'}</div><div class="bar"><div class="fill ${ramState}" style="width:${Math.min(100,Math.max(0,l.ram))}%"></div></div></div>`+
-`<div class="card"><div class="label">Temperatura CPU</div><div class="metric status-value ${cpuTempState}">${esc(l.cpu_temp??'N/D')} °C</div><div class="small">NVMe ${esc(l.nvme_temp??'N/D')} °C</div><div class="bar"><div class="fill ${cpuTempState}" style="width:${Math.min(100,Math.max(0,l.cpu_temp||0))}%"></div></div></div>`+
-metric('Red',`↓ ${l.rx_mbps} Mbps`,`↑ ${l.tx_mbps} Mbps · ${l.iface||'N/D'}`,null);$('#disks').innerHTML=l.disks.map(x=>{
-let dev=baseDiskDevice(x.device);
-let sm=(slowData?.smart||[]).find(v=>v.device===dev)||{};
-let temp=sm.temperature??null;
-let healthClass=sm.passed===true?'oktxt':sm.passed===false?'badtxt':'muted';
-let healthText=sm.passed===true?'OK':sm.passed===false?'FALLO':'N/D';
-let tempClass=temp==null?'':temp>=60?'bad':temp>=50?'warn':'';
-return `<div class="card disk-card">
+function ensureLiveMetricCards(){
+  const root=$('#metrics');
+  if(root.dataset.liveMetricCards==='ready')return;
+  root.innerHTML=`<div class="card" data-live-card="cpu"><div class="label">CPU</div><div class="metric status-value" data-live-field="value"></div><div class="small" data-live-field="load"></div><div class="small sep-detail" data-live-field="uptime"></div><div class="bar"><div class="fill" data-live-field="bar"></div></div></div>`+
+    `<div class="card" data-live-card="ram"><div class="label">RAM</div><div class="metric status-value" data-live-field="value"></div><div class="small" data-live-field="used"></div><div class="small sep-detail" data-live-field="swap"></div><div class="bar"><div class="fill" data-live-field="bar"></div></div></div>`+
+    `<div class="card" data-live-card="temperature"><div class="label">Temperatura CPU</div><div class="metric status-value" data-live-field="value"></div><div class="small" data-live-field="nvme"></div><div class="bar"><div class="fill" data-live-field="bar"></div></div></div>`+
+    `<div class="card" data-live-card="network"><div class="label">Red</div><div class="metric" data-live-field="rx"></div><div class="small" data-live-field="tx"></div></div>`;
+  root.dataset.liveMetricCards='ready';
+}
+function liveCard(name){return $('#metrics').querySelector(`[data-live-card="${name}"]`)}
+function setLiveText(node,value){if(node&&node.textContent!==String(value))node.textContent=String(value)}
+function setLiveState(node,state){const value=`metric status-value ${state}`;if(node&&node.className!==value)node.className=value}
+function setLiveBar(node,state,value){if(!node)return;const cls=`fill ${state}`;const width=`${Math.min(100,Math.max(0,Number(value)||0))}%`;if(node.className!==cls)node.className=cls;if(node.style.width!==width)node.style.width=width}
+function setHtmlIfChanged(node,html){if(node.__miuraRenderedHtml===html)return false;node.innerHTML=html;node.__miuraRenderedHtml=html;return true}
+function bindLiveDiskActions(root,copyPaths=false){
+  root.querySelectorAll('.sep-disk-rename').forEach(btn=>btn.addEventListener('click',()=>sepRenameDisk(btn.dataset.diskKey,btn.dataset.defaultName)));
+  if(copyPaths)root.querySelectorAll('.copy-path').forEach(btn=>btn.addEventListener('click',async()=>{
+    let original=btn.textContent;
+    try{await copyText(btn.dataset.copy||'');btn.textContent='Copiado ✓'}catch(e){btn.textContent='Error'}
+    setTimeout(()=>btn.textContent=original,1200);
+  }));
+}
+function renderLive(l){
+  const cpuModel=slowData?.system?.cpu_model||'CPU',cpuCount=slowData?.system?.cpu_count||'';
+  setLiveText($('#sub'),`${cpuModel}${cpuCount?' · '+cpuCount+' hilos':''} · RAM ${hb(l.ram_total)}`);
+  ensureLiveMetricCards();
+  const cpuState=pctState(l.cpu),ramState=pctState(l.ram),cpuTempState=tempState(l.cpu_temp,'cpu');
+  let card=liveCard('cpu');
+  setLiveState(card.querySelector('[data-live-field="value"]'),cpuState);
+  setLiveText(card.querySelector('[data-live-field="value"]'),`${l.cpu}%`);
+  setLiveText(card.querySelector('[data-live-field="load"]'),`Carga ${l.load1} / ${l.load5} / ${l.load15}`);
+  setLiveText(card.querySelector('[data-live-field="uptime"]'),`Encendido: ${formatUptime(l.uptime_seconds)}`);
+  setLiveBar(card.querySelector('[data-live-field="bar"]'),cpuState,l.cpu);
+
+  card=liveCard('ram');
+  setLiveState(card.querySelector('[data-live-field="value"]'),ramState);
+  setLiveText(card.querySelector('[data-live-field="value"]'),`${l.ram}%`);
+  setLiveText(card.querySelector('[data-live-field="used"]'),`${hb(l.ram_used)} / ${hb(l.ram_total)}`);
+  setLiveText(card.querySelector('[data-live-field="swap"]'),Number(l.swap_total)>0?`Swap: ${hb(l.swap_used)} / ${hb(l.swap_total)} (${l.swap_percent}%)`:'Swap: no configurada');
+  setLiveBar(card.querySelector('[data-live-field="bar"]'),ramState,l.ram);
+
+  card=liveCard('temperature');
+  setLiveState(card.querySelector('[data-live-field="value"]'),cpuTempState);
+  setLiveText(card.querySelector('[data-live-field="value"]'),`${l.cpu_temp??'N/D'} °C`);
+  setLiveText(card.querySelector('[data-live-field="nvme"]'),`NVMe ${l.nvme_temp??'N/D'} °C`);
+  setLiveBar(card.querySelector('[data-live-field="bar"]'),cpuTempState,l.cpu_temp||0);
+
+  card=liveCard('network');
+  setLiveText(card.querySelector('[data-live-field="rx"]'),`↓ ${l.rx_mbps} Mbps`);
+  setLiveText(card.querySelector('[data-live-field="tx"]'),`↑ ${l.tx_mbps} Mbps · ${l.iface||'N/D'}`);
+
+  const diskMarkup=(l.disks||[]).map(x=>{
+    let dev=baseDiskDevice(x.device);
+    let sm=(slowData?.smart||[]).find(v=>v.device===dev)||{};
+    let temp=sm.temperature??null;
+    let healthClass=sm.passed===true?'oktxt':sm.passed===false?'badtxt':'muted';
+    let healthText=sm.passed===true?'OK':sm.passed===false?'FALLO':'N/D';
+    let tempClass=temp==null?'':temp>=60?'bad':temp>=50?'warn':'';
+    return `<div class="card disk-card">
 <div class="disk-head"><div><div class="disk-name">${esc(sepDiskName(x))}</div><div class="disk-dev">${esc(x.device)}</div><button class="sep-disk-rename" type="button" data-disk-key="${esc(sepDiskKey(x))}" data-default-name="${esc(x.label||x.device)}">✎ Renombrar</button></div><span class="pill disk-health ${healthClass}">${healthText}</span></div>
 <div style="display:flex;align-items:center;justify-content:space-between;gap:10px"><div class="metric status-value ${pctState(x.percent,'disk')}">${x.percent}%</div><div class="disk-temp ${tempClass}">△ ${temp==null?'N/D':temp+' °C'}</div></div>
 <div class="mountrow"><div class="mount" title="${esc(x.mount)}">${esc(x.mount)}</div><button class="copy-path" type="button" data-copy="${esc(x.mount)}">Copiar ruta</button></div>
@@ -1326,22 +1372,34 @@ return `<div class="card disk-card">
 </div>
 <div class="bar"><div class="fill ${pctState(x.percent,'disk')}" style="width:${x.percent}%"></div></div>
 </div>`
- }).join('');
-// Mostrar eMMC de rescate/no montada: solo información del controlador Linux.
-const mounted=new Set((l.disks||[]).map(x=>baseDiskDevice(x.device)));
-const hidden=(slowData?.smart||[]).filter(x=>x.type==='emmc'&&!mounted.has(x.device));
-$('#sepUnmountedDisks').innerHTML=hidden.map(x=>`<div class="card disk-card sep-emmc-card">
+  }).join('');
+  const disksChanged=setHtmlIfChanged($('#disks'),diskMarkup);
+  if(disksChanged)bindLiveDiskActions($('#disks'),true);
+  const mounted=new Set((l.disks||[]).map(x=>baseDiskDevice(x.device)));
+  const hidden=(slowData?.smart||[]).filter(x=>x.type==='emmc'&&!mounted.has(x.device));
+  const hiddenMarkup=hidden.map(x=>`<div class="card disk-card sep-emmc-card">
 <div class="disk-name">${esc(sepDiskName(x,true))}</div><button class="sep-disk-rename" type="button" data-disk-key="${esc(sepDiskKey(x,true))}" data-default-name="${esc(x.model||'eMMC')}">✎ Renombrar</button><div class="disk-dev">${esc(x.device)} · Sin montar (solo lectura)</div>
 <div class="disk-detail"><span>Estado eMMC</span><strong>${x.pre_eol===1?'Normal':x.pre_eol===2?'Aviso':x.pre_eol===3?'Urgente':'N/D'}</strong></div>
 <div class="disk-detail"><span>Vida estimada</span><strong>${esc(x.life_label||'N/D')}</strong></div>
 <div class="disk-detail"><span>Capacidad</span><strong>${x.size?hb(x.size):'N/D'}</strong></div></div>`).join('');
-document.querySelectorAll('.sep-disk-rename').forEach(btn=>btn.addEventListener('click',()=>sepRenameDisk(btn.dataset.diskKey,btn.dataset.defaultName)));
-document.querySelectorAll('.copy-path').forEach(btn=>btn.addEventListener('click',async()=>{
-  let original=btn.textContent;
-  try{await copyText(btn.dataset.copy||'');btn.textContent='Copiado ✓'}catch(e){btn.textContent='Error'}
-  setTimeout(()=>btn.textContent=original,1200);
-}));
-liveHistory.push(l);if(liveHistory.length>MAX_POINTS)liveHistory.shift();svgChart($('#chartCpu'),[{name:'CPU',vals:liveHistory.map(x=>x.cpu)},{name:'RAM',vals:liveHistory.map(x=>x.ram)}],100,'%');svgChart($('#chartTemp'),[{name:'CPU',vals:liveHistory.map(x=>x.cpu_temp)},{name:'NVMe',vals:liveHistory.map(x=>x.nvme_temp)}],100,'°');let netMax=Math.max(1,...liveHistory.flatMap(x=>[x.rx_mbps||0,x.tx_mbps||0]))*1.15;svgChart($('#chartNet'),[{name:'Bajada',vals:liveHistory.map(x=>x.rx_mbps)},{name:'Subida',vals:liveHistory.map(x=>x.tx_mbps)}],netMax,'')}
+  const hiddenChanged=setHtmlIfChanged($('#sepUnmountedDisks'),hiddenMarkup);
+  if(hiddenChanged)bindLiveDiskActions($('#sepUnmountedDisks'));
+
+  const chartFields=['cpu','ram','cpu_temp','nvme_temp','rx_mbps','tx_mbps'];
+  const last=liveHistory.at(-1);
+  const chartValuesChanged=!last||chartFields.some(key=>last[key]!==l[key]);
+  liveSampleCount++;
+  const chartRefreshDue=liveSampleCount-lastChartRenderSample>=CHART_REFRESH_EVERY;
+  liveHistory.push(l);
+  if(liveHistory.length>MAX_POINTS)liveHistory.shift();
+  if(chartValuesChanged||chartRefreshDue){
+    svgChart($('#chartCpu'),[{name:'CPU',vals:liveHistory.map(x=>x.cpu)},{name:'RAM',vals:liveHistory.map(x=>x.ram)}],100,'%');
+    svgChart($('#chartTemp'),[{name:'CPU',vals:liveHistory.map(x=>x.cpu_temp)},{name:'NVMe',vals:liveHistory.map(x=>x.nvme_temp)}],100,'°');
+    let netMax=Math.max(1,...liveHistory.flatMap(x=>[x.rx_mbps||0,x.tx_mbps||0]))*1.15;
+    svgChart($('#chartNet'),[{name:'Bajada',vals:liveHistory.map(x=>x.rx_mbps)},{name:'Subida',vals:liveHistory.map(x=>x.tx_mbps)}],netMax,'');
+    lastChartRenderSample=liveSampleCount;
+  }
+}
 async function loadDockerVersions(){try{let r=await fetch('docker-updates.json?'+Date.now());if(r.ok)dockerVersions=await r.json()}catch(e){}renderDocker();renderTopAlerts();if(slowData)renderSlow(slowData)}
 async function loadSlow(){try{renderSlow(await fetch('data.json?'+Date.now()).then(r=>r.json()));await loadDockerVersions()}catch(e){console.error(e)}}
 async function loadLive(){try{let r=await fetch('/api/live?'+Date.now());if(!r.ok)throw new Error('HTTP '+r.status);renderLive(await r.json())}catch(e){$('#sub').textContent='Error leyendo métricas en tiempo real: '+e.message}}
@@ -1462,7 +1520,7 @@ async function checkPanelVersion(){
       btn.onclick=()=>launchPanelUpdateFromHeader(data.latest,btn);
     }else if(data.status==='ok'){
       btn.classList.add('current');
-      btn.textContent='✓ Miura Panel al día · v1.0.35';
+      btn.textContent='✓ Miura Panel al día · v1.0.38';
       btn.hidden=false;btn.disabled=true;btn.onclick=null;
     }else{
       btn.hidden=true;btn.disabled=false;btn.classList.remove('current');btn.onclick=null;
@@ -1794,7 +1852,7 @@ $('#updateAllBtn').addEventListener('click',()=>startDockerUpdate('update_all'))
 /* Detecta el reinicio de Miura Panel después de una actualización sin F5.
    Nunca solicita otra instalación ni interrumpe trabajos del servidor. */
 (()=>{
-  const installedAtLoad='1.0.35';
+  const installedAtLoad='1.0.38';
   let checking=false, refreshing=false;
   async function checkReload(){
     if(checking||refreshing)return;

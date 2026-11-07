@@ -12,15 +12,15 @@ Miura Panel es una herramienta gratuita y de código abierto para consultar y ad
 - Funciones de supervisión y administración de Docker.
 - Sistema de actualizaciones versionadas.
 
-## Miura Panel v1.0.37 (candidata)
+## Miura Panel v1.0.38 (candidata)
 
 La candidata instala el panel de solo lectura en modo normal o demo. El instalador incluido puede ejecutarse sin red desde este árbol de fuentes. `build-installer.sh` crea un instalador shell autocontenido en `dist/`, junto con su suma SHA256.
 
-Para ejecutar el instalador autocontenido desde `dist/`, verifica y ejecuta `install-spanish-empire-panel-v1.0.37.sh`:
+Para ejecutar el instalador autocontenido desde `dist/`, verifica y ejecuta `install-spanish-empire-panel-v1.0.38.sh`:
 
 ```sh
-(cd dist && sha256sum -c install-spanish-empire-panel-v1.0.37.sh.sha256)
-sudo ./dist/install-spanish-empire-panel-v1.0.37.sh --demo
+(cd dist && sha256sum -c install-spanish-empire-panel-v1.0.38.sh.sha256)
+sudo ./dist/install-spanish-empire-panel-v1.0.38.sh --demo
 ```
 
 ```sh
