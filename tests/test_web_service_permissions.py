@@ -208,7 +208,7 @@ class WebServicePermissionTests(unittest.TestCase):
         read_gid = read_group_gid()
         with tempfile.TemporaryDirectory(prefix="miura-admin-read-access-") as temp:
             os.chown(temp, nobody.pw_uid, read_gid)
-            os.chmod(temp, 0o710)
+            os.chmod(temp, 0o700)
             prefix = pathlib.Path(temp) / "root"
             admin_unit = prefix / ADMIN_UNIT_REL
             admin_unit.parent.mkdir(parents=True, exist_ok=True)
@@ -287,7 +287,7 @@ class WebServicePermissionTests(unittest.TestCase):
                 encoding="utf-8",
             )
             os.chown(temp, nobody.pw_uid, read_gid)
-            os.chmod(temp, 0o710)
+            os.chmod(temp, 0o700)
             os.chown(prefix, 0, read_gid)
             prefix.chmod(0o710)
             for rel in ("etc", "var", "var/www", "usr", "usr/local", "usr/local/sbin"):
@@ -326,7 +326,7 @@ class WebServicePermissionTests(unittest.TestCase):
             with self.subTest(restrictive_parent=restrictive), tempfile.TemporaryDirectory(
                     prefix="miura-web-parent-check-") as temp:
                 os.chown(temp, pwd.getpwnam("nobody").pw_uid, read_gid)
-                os.chmod(temp, 0o710)
+                os.chmod(temp, 0o700)
                 prefix = pathlib.Path(temp) / "root"
                 prefix.mkdir()
                 os.chown(prefix, 0, read_gid)
@@ -490,7 +490,7 @@ class WebServicePermissionTests(unittest.TestCase):
                 self.assert_service_contract(prefix)
                 self.assertEqual(json.loads((prefix / WEB_REL / "version.json").read_text())["version"], old_version)
                 os.chown(temp, pwd.getpwnam("nobody").pw_uid, read_group_gid())
-                os.chmod(temp, 0o710)
+                os.chmod(temp, 0o700)
                 os.chown(prefix, 0, read_group_gid())
                 prefix.chmod(0o710)
                 for rel in ("etc", "var", "var/www", "usr", "usr/local", "usr/local/sbin"):

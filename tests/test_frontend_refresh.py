@@ -5,6 +5,7 @@ import pathlib
 import re
 import subprocess
 import unittest
+from html.parser import HTMLParser
 
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
@@ -17,8 +18,33 @@ def git_file(revision, path):
     ).stdout
 
 
+class ScriptExtractor(HTMLParser):
+    """Collect script contents using HTML's case-insensitive tag parsing."""
+
+    def __init__(self):
+        super().__init__(convert_charrefs=False)
+        self.scripts = []
+        self.current_script = None
+
+    def handle_starttag(self, tag, attrs):
+        if tag == "script":
+            self.current_script = []
+
+    def handle_data(self, data):
+        if self.current_script is not None:
+            self.current_script.append(data)
+
+    def handle_endtag(self, tag):
+        if tag == "script" and self.current_script is not None:
+            self.scripts.append("".join(self.current_script))
+            self.current_script = None
+
+
 def reload_script(html):
-    for body in re.findall(r"<script>(.*?)</script>", html, re.DOTALL):
+    parser = ScriptExtractor()
+    parser.feed(html)
+    parser.close()
+    for body in parser.scripts:
         if "const installedAtLoad=" in body:
             return body
     raise AssertionError("No se encontró el comprobador de versión del frontend")
@@ -55,6 +81,10 @@ vm.runInNewContext(SCRIPT, context);
 
 
 class FrontendRefreshTests(unittest.TestCase):
+    def test_script_extractor_handles_case_and_attributes(self):
+        html = '<SCRIPT type="text/javascript">const installedAtLoad=\'x\';</SCRIPT>'
+        self.assertIn("const installedAtLoad=", reload_script(html))
+
     def test_historical_version_watcher_characterizes_v1034_v1036_v1037(self):
         # v1.0.34's baked-in version matches the endpoint, but .36 and .37
         # retained 1.0.35 and reload every time the page is loaded.
