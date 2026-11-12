@@ -190,9 +190,14 @@ class AdminHttpsBootstrapTests(unittest.TestCase):
             admin_groups = [line.split(":") for line in groups if line.split(":", 1)[0] == "sep-admin"]
             self.assertEqual(len(admin_users), 1)
             self.assertEqual(len(admin_groups), 1)
-            self.assertEqual(admin_users[0][2], admin_users[0][3], "service account must use its dedicated primary group")
+            self.assertTrue(admin_users[0][2].isdigit(), "service account must have a numeric UID")
+            self.assertNotEqual(int(admin_users[0][2]), 0, "service account must not run as root")
+            self.assertTrue(admin_users[0][3].isdigit(), "service account must have a numeric primary GID")
             self.assertIn(admin_users[0][6], ("/usr/sbin/nologin", "/bin/false"))
-            self.assertEqual(admin_groups[0][2], admin_users[0][3])
+            self.assertEqual(
+                admin_groups[0][2], admin_users[0][3],
+                "service account must use its dedicated primary group",
+            )
             self.assertEqual(admin_groups[0][3], "", "dedicated admin group must not contain human accounts")
             self.assertEqual((prefix / ADMIN_STATE).stat().st_mode & 0o777, 0o700)
 
