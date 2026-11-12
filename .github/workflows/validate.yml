@@ -51,7 +51,17 @@ jobs:
 
       - name: Test checked-in candidate artifacts
         if: contains(fromJSON('["refs/heads/development/v1.0.35-candidate","refs/heads/development/v1.0.36-candidate","refs/heads/development/v1.0.37-candidate","refs/heads/development/v1.0.38-candidate","refs/heads/development/v1.0.39-candidate"]'), github.ref)
-        run: python -m unittest discover -s tests -v
+        run: |
+          set +e
+          python -m unittest discover -s tests -v > "$RUNNER_TEMP/candidate-tests.log" 2>&1
+          test_status=$?
+          cat "$RUNNER_TEMP/candidate-tests.log"
+          if [[ "$test_status" -ne 0 ]]; then
+            tail -n 40 "$RUNNER_TEMP/candidate-tests.log" | while IFS= read -r line; do
+              printf '::error title=Candidate test output::%s\n' "$line"
+            done
+            exit "$test_status"
+          fi
 
       - name: Build and exercise package for this version
         env:
