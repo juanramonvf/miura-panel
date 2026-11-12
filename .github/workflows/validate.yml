@@ -55,7 +55,6 @@ jobs:
           set +e
           python -m unittest discover -s tests -v > "$RUNNER_TEMP/candidate-tests.log" 2>&1
           test_status=$?
-          cat "$RUNNER_TEMP/candidate-tests.log"
           if [[ "$test_status" -ne 0 ]]; then
             python - "$RUNNER_TEMP/candidate-tests.log" <<'PY'
           import sys
@@ -65,6 +64,7 @@ jobs:
           for line in lines:
               escaped = (line[:3000].replace("%", "%25").replace("\r", "%0D")
                          .replace("\n", "%0A").replace(":", "%3A").replace(",", "%2C"))
+              print(f"TEST OUTPUT: {escaped}")
               print(f"::error title=Candidate test output::{escaped}")
           PY
             exit "$test_status"
