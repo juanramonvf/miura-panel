@@ -57,6 +57,7 @@ jobs:
           test_status=$?
           if [[ "$test_status" -ne 0 ]]; then
             echo "Candidate unittest process exit status: $test_status"
+            printf '::error title=Candidate unittest exit status::%s\n' "$test_status"
             echo "Candidate unittest log lines: $(wc -l < "$RUNNER_TEMP/candidate-tests.log")"
             python - "$RUNNER_TEMP/candidate-tests.log" <<'PY'
           import sys
