@@ -57,9 +57,16 @@ jobs:
           test_status=$?
           cat "$RUNNER_TEMP/candidate-tests.log"
           if [[ "$test_status" -ne 0 ]]; then
-            tail -n 40 "$RUNNER_TEMP/candidate-tests.log" | while IFS= read -r line; do
-              printf '::error title=Candidate test output::%s\n' "$line"
-            done
+            python - "$RUNNER_TEMP/candidate-tests.log" <<'PY'
+          import sys
+          from pathlib import Path
+
+          lines = Path(sys.argv[1]).read_text(errors="replace").splitlines()[-40:]
+          for line in lines:
+              escaped = (line[:3000].replace("%", "%25").replace("\r", "%0D")
+                         .replace("\n", "%0A").replace(":", "%3A").replace(",", "%2C"))
+              print(f"::error title=Candidate test output::{escaped}")
+          PY
             exit "$test_status"
           fi
 
