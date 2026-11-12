@@ -559,11 +559,11 @@ class WebServicePermissionTests(unittest.TestCase):
             original_live = (prefix / LIVE_REL).read_text(encoding="utf-8")
             runtime = prefix / LIVE_REL
             replacements = (
-                ('CONFIG_FILE = Path("/etc/server-dashboard.conf")',
+                ('CONFIG_FILE = rooted("/etc/server-dashboard.conf")',
                  f"CONFIG_FILE = Path({str(conf)!r})"),
-                ('WEB_DIR = Path("/var/www/server-dashboard")',
+                ('WEB_DIR = rooted("/var/www/server-dashboard")',
                  f"WEB_DIR = Path({str(web)!r})"),
-                ('PREF_DIR = Path("/var/lib/server-dashboard/preferences")',
+                ('PREF_DIR = rooted("/var/lib/server-dashboard/preferences")',
                  f"PREF_DIR = Path({str(prefix / PREF_REL)!r})"),
                 ('grp.getgrnam("server-dashboard-prefs").gr_gid', str(prefs_gid)),
             )
@@ -593,7 +593,8 @@ class WebServicePermissionTests(unittest.TestCase):
             ]
             process = subprocess.Popen(
                 command, cwd=web, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE,
-                text=True, env={**os.environ, "PYTHONDONTWRITEBYTECODE": "1"},
+                text=True, env={**os.environ, "PYTHONDONTWRITEBYTECODE": "1",
+                               "MIURA_ROOT_PREFIX": str(prefix)},
             )
             base = f"http://127.0.0.1:{port}"
 

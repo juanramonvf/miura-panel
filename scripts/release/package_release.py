@@ -112,7 +112,7 @@ def test_demo_install(installer: pathlib.Path, version: str) -> None:
         if f'"version": "{version}"' not in (web / "version.json").read_text(encoding="utf-8"):
             fail("upgrade demo no conserva la versión objetivo")
         for unit in ("server-dashboard-web.service", "server-dashboard-collector.service",
-                     "server-dashboard-collector.timer"):
+                     "server-dashboard-collector.timer", "server-dashboard-admin.service"):
             if not (prefix / "etc/systemd/system" / unit).is_file():
                 fail(f"no se generó la unidad {unit}")
         analyzer = shutil.which("systemd-analyze")
@@ -120,8 +120,19 @@ def test_demo_install(installer: pathlib.Path, version: str) -> None:
             fail("systemd-analyze es obligatorio para validar las unidades del paquete")
         units = [str(prefix / "etc/systemd/system" / name) for name in (
             "server-dashboard-web.service", "server-dashboard-collector.service",
-            "server-dashboard-collector.timer")]
+            "server-dashboard-collector.timer", "server-dashboard-admin.service")]
         subprocess.run([analyzer, "verify", *units], check=True)
+        admin_unit = (prefix / "etc/systemd/system/server-dashboard-admin.service").read_text(encoding="utf-8")
+        if "User=sep-admin\n" not in admin_unit or "Group=sep-admin\n" not in admin_unit:
+            fail("administration unit does not run as the dedicated sep-admin account")
+        if "ProtectSystem=strict\n" not in admin_unit or "NoNewPrivileges=true\n" not in admin_unit:
+            fail("administration unit is missing required sandbox controls")
+        if "ReadWritePaths=/var/lib/server-dashboard/preferences\n" not in admin_unit:
+            fail("administration unit has an unexpected writable path")
+        if "UnsetEnvironment=MIURA_ROOT_PREFIX\n" not in admin_unit:
+            fail("administration unit may inherit the isolated test root prefix")
+        if (prefix / "etc/systemd/system/multi-user.target.wants/server-dashboard-admin.service").exists():
+            fail("clean demo install must leave authenticated administration disabled")
 
 
 def main() -> None:

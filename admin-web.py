@@ -28,28 +28,33 @@ import time
 from http.server import ThreadingHTTPServer
 from urllib.parse import urlsplit
 
-sys.path.insert(0, '/usr/local/sbin')
+ROOT_PREFIX=Path(os.environ['MIURA_ROOT_PREFIX']).resolve() if os.environ.get('MIURA_ROOT_PREFIX') else None
+def rooted(path):
+    path=Path(path)
+    return ROOT_PREFIX/str(path).lstrip('/') if ROOT_PREFIX else path
+
+sys.path.insert(0, str(rooted('/usr/local/sbin')))
 import importlib.util
-spec=importlib.util.spec_from_file_location('sep_live','/usr/local/sbin/server-dashboard-live.py')
+spec=importlib.util.spec_from_file_location('sep_live',str(rooted('/usr/local/sbin/server-dashboard-live.py')))
 live=importlib.util.module_from_spec(spec)
 spec.loader.exec_module(live)
 live.ADMIN_MODE=True
-fleet_spec=importlib.util.spec_from_file_location('sep_admin_fleet','/usr/local/sbin/sep-admin-fleet.py')
+fleet_spec=importlib.util.spec_from_file_location('sep_admin_fleet',str(rooted('/usr/local/sbin/sep-admin-fleet.py')))
 fleet=importlib.util.module_from_spec(fleet_spec)
 fleet_spec.loader.exec_module(fleet)
 
-CONF=Path('/etc/spanish-empire-panel/admin.json')
-CONFIG=Path('/etc/server-dashboard.conf')
-ROOT=Path('/var/lib/spanish-empire-panel-admin')
+CONF=rooted('/etc/spanish-empire-panel/admin.json')
+CONFIG=rooted('/etc/server-dashboard.conf')
+ROOT=rooted('/var/lib/spanish-empire-panel-admin')
 KEY=ROOT/'id_ed25519'
 KNOWN=ROOT/'known_hosts'
-WEB=Path('/var/www/server-dashboard')
+WEB=rooted('/var/www/server-dashboard')
 ACCOUNT=ROOT/'account.json'
 SMTP=ROOT/'smtp.json'
 RESET=ROOT/'password-reset.json'
 PENDING_EMAIL=ROOT/'pending-email-change.json'
 SETTINGS=ROOT/'settings.json'
-PREF=Path('/var/lib/server-dashboard/preferences/ui.json')
+PREF=rooted('/var/lib/server-dashboard/preferences/ui.json')
 ROLE=WEB/'fleet-role.json'
 
 
@@ -738,7 +743,8 @@ if __name__=='__main__':
     httpd=ThreadingHTTPServer((BIND,PORT),Handler)
     ctx=ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
     ctx.minimum_version=ssl.TLSVersion.TLSv1_2
-    ctx.load_cert_chain('/etc/spanish-empire-panel/admin.crt','/etc/spanish-empire-panel/admin.key')
+    ctx.load_cert_chain(str(rooted('/etc/spanish-empire-panel/admin.crt')),
+                        str(rooted('/etc/spanish-empire-panel/admin.key')))
     httpd.socket=ctx.wrap_socket(httpd.socket,server_side=True)
     os.chdir(WEB)
     httpd.serve_forever()
