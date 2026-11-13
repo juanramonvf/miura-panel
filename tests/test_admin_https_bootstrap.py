@@ -260,9 +260,9 @@ class AdminHttpsBootstrapTests(unittest.TestCase):
                 module.complete_activation()
                 self.assertTrue((prefix / ADMIN_ROOT / "admin-enabled").is_file())
                 self.assertTrue((prefix / "var/www/server-dashboard/admin-status.json").is_file())
-                self.assertEqual((prefix / ADMIN_ROOT / "admin.json").stat().st_mode & 0o777, 0o640)
-                self.assertEqual((prefix / ADMIN_ROOT / "admin.crt").stat().st_mode & 0o777, 0o640)
-                self.assertEqual((prefix / ADMIN_ROOT / "admin.key").stat().st_mode & 0o777, 0o640)
+                self.assertEqual((prefix / ADMIN_ROOT / "admin.json").stat().st_mode & 0o777, 0o400)
+                self.assertEqual((prefix / ADMIN_ROOT / "admin.crt").stat().st_mode & 0o777, 0o400)
+                self.assertEqual((prefix / ADMIN_ROOT / "admin.key").stat().st_mode & 0o777, 0o400)
                 self.assertEqual((prefix / ADMIN_STATE / "account.json").stat().st_mode & 0o777, 0o600)
                 self.assertEqual((prefix / ADMIN_STATE).stat().st_mode & 0o777, 0o700)
 
@@ -387,8 +387,8 @@ class AdminHttpsBootstrapTests(unittest.TestCase):
 
             module.subprocess = IsolatedSubprocess
             original_write = module.atomic_write
-            module.atomic_write = lambda path, data, mode, uid=None, gid=None: original_write(
-                path, data, mode, None, None
+            module.atomic_write = lambda path, data, uid=None, gid=None, read_only=False: original_write(
+                path, data, None, None, read_only
             )
             module.check_https_ready = lambda *_args, **_kwargs: (_ for _ in ()).throw(
                 RuntimeError("TLS health check failed")
@@ -425,31 +425,30 @@ class AdminHttpsBootstrapTests(unittest.TestCase):
             # Root-prefix keeps host account/group databases untouched. Prepare
             # only the test tree with the same ownership/modes as production.
             sep_admin = pwd.getpwnam("sep-admin")
-            sep_group = grp.getgrnam("sep-admin")
             read_gid = grp.getgrnam("www-data").gr_gid
             # Root-prefix deliberately does not mutate host accounts. Model
             # the installer-created, empty preferences group inside the
             # fixture so systemd-run can exercise the real supplementary GID.
             groups_file = prefix / "etc/group"
             group_lines = groups_file.read_text(encoding="utf-8").splitlines()
-            # Use the existing www-data numeric GID for this fixture entry;
-            # the host's systemd resolves supplementary groups against its
-            # own group database, while the production unit is checked above
-            # for the dedicated server-dashboard-prefs name.
+            # The group fixture lets systemd resolve the unit's supplementary
+            # group, but each file below is readable only by the sep-admin
+            # identity that consumes it.
             prefs_gid = read_gid
             group_lines.append(f"server-dashboard-prefs:x:{prefs_gid}:")
             groups_file.write_text("\n".join(group_lines) + "\n", encoding="utf-8")
             for path in (temp_path, prefix, prefix / "etc", prefix / "usr", prefix / "usr/local",
                          prefix / "usr/local/sbin", prefix / "var", prefix / "var/www",
                          prefix / "var/lib"):
-                os.chmod(path, 0o755)
+                os.chown(path, sep_admin.pw_uid, sep_admin.pw_gid)
+                os.chmod(path, 0o700)
             admin_dir = prefix / ADMIN_ROOT
-            os.chown(admin_dir, 0, sep_group.gr_gid)
-            os.chmod(admin_dir, 0o750)
+            os.chown(admin_dir, sep_admin.pw_uid, sep_admin.pw_gid)
+            os.chmod(admin_dir, 0o700)
             for name in ("admin.json", "admin.crt", "admin.key"):
                 path = admin_dir / name
-                os.chown(path, 0, sep_group.gr_gid)
-                os.chmod(path, 0o640)
+                os.chown(path, sep_admin.pw_uid, sep_admin.pw_gid)
+                os.chmod(path, 0o400)
             state = prefix / ADMIN_STATE
             os.chown(state, sep_admin.pw_uid, sep_admin.pw_gid)
             os.chmod(state, 0o700)
@@ -458,35 +457,36 @@ class AdminHttpsBootstrapTests(unittest.TestCase):
             os.chmod(account_file, 0o600)
 
             config = prefix / "etc/server-dashboard.conf"
-            os.chown(config, 0, read_gid)
-            os.chmod(config, 0o640)
+            os.chown(config, sep_admin.pw_uid, sep_admin.pw_gid)
+            os.chmod(config, 0o400)
             web = prefix / "var/www/server-dashboard"
-            os.chown(web, 0, read_gid)
-            os.chmod(web, 0o750)
+            os.chown(web, sep_admin.pw_uid, sep_admin.pw_gid)
+            os.chmod(web, 0o700)
             for path in web.rglob("*"):
                 if path.is_dir():
-                    os.chown(path, 0, read_gid)
-                    os.chmod(path, 0o750)
+                    os.chown(path, sep_admin.pw_uid, sep_admin.pw_gid)
+                    os.chmod(path, 0o700)
                 else:
-                    os.chown(path, 0, read_gid)
-                    os.chmod(path, 0o640)
+                    os.chown(path, sep_admin.pw_uid, sep_admin.pw_gid)
+                    os.chmod(path, 0o400)
             sbin = prefix / "usr/local/sbin"
             helpers = [sbin / "server-dashboard-admin.py", sbin / "server-dashboard-live.py",
                        sbin / "sep-admin-fleet.py"]
             for helper in helpers:
-                os.chown(helper, 0, read_gid)
-                os.chmod(helper, 0o750)
+                os.chown(helper, sep_admin.pw_uid, sep_admin.pw_gid)
+                os.chmod(helper, 0o500)
 
             preferences = prefix / "var/lib/server-dashboard/preferences"
-            os.chown(prefix / "var/lib/server-dashboard", 0, read_gid)
-            os.chmod(prefix / "var/lib/server-dashboard", 0o710)
-            os.chown(preferences, 0, prefs_gid)
-            os.chmod(preferences, 0o2770)
+            os.chown(prefix / "var/lib/server-dashboard", sep_admin.pw_uid, sep_admin.pw_gid)
+            os.chmod(prefix / "var/lib/server-dashboard", 0o700)
+            os.chown(preferences, sep_admin.pw_uid, sep_admin.pw_gid)
+            os.chmod(preferences, 0o700)
             paths_to_read = [admin_dir / "admin.json", admin_dir / "admin.crt", admin_dir / "admin.key",
                              config, web / "index.html", *helpers]
             forbidden = prefix / "etc/miura-admin-sandbox-write-denied"
             python = (
                 "from pathlib import Path; import errno,os,sys; "
+                f"assert {read_gid} in os.getgroups(), 'systemd did not apply the supplementary read group'; "
                 "[p.read_bytes() for p in map(Path,sys.argv[1:-2])]; "
                 "prefs=Path(sys.argv[-2]); tmp=prefs/'.ui.pending'; tmp.write_text('saved'); "
                 "os.replace(tmp,prefs/'ui.json'); "
@@ -690,8 +690,8 @@ class AdminHttpsBootstrapTests(unittest.TestCase):
 
             module.subprocess = IsolatedSubprocess
             real_atomic_write = module.atomic_write
-            module.atomic_write = lambda path, data, mode, uid=None, gid=None: real_atomic_write(
-                path, data, mode, None, None
+            module.atomic_write = lambda path, data, uid=None, gid=None, read_only=False: real_atomic_write(
+                path, data, None, None, read_only
             )
             real_run = module.run
 

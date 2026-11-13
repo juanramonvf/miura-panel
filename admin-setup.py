@@ -11,11 +11,13 @@ import http.client
 import ipaddress
 import json
 import os
+import pwd
 import re
 import secrets
 import shutil
 import socket
 import ssl
+import stat
 import subprocess
 import sys
 import time
@@ -198,9 +200,14 @@ def activate_admin(bind,port):
 
 def complete_activation(gid=None):
     can_chown=(os.getuid()==0 and not ROOT_PREFIX)
-    atomic_write(MARK,b'enabled\n',0o640,0 if can_chown else None,gid if can_chown else None)
-    atomic_write(STATUS,b'{"enabled":true}\n',0o644,0 if can_chown else None,
-                 None if ROOT_PREFIX or not can_chown else -1)
+    if can_chown:
+        web_account=__import__('pwd').getpwnam('www-data')
+        atomic_write(MARK,b'enabled\n',0,0,read_only=True)
+        atomic_write(STATUS,b'{"enabled":true}\n',web_account.pw_uid,web_account.pw_gid,
+                     read_only=True)
+    else:
+        atomic_write(MARK,b'enabled\n',read_only=True)
+        atomic_write(STATUS,b'{"enabled":true}\n',read_only=True)
 
 
 def current_service_state():
@@ -229,17 +236,19 @@ def restore_service_state(was_active,was_enabled):
                    stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL,check=False)
 
 
-def atomic_write(path,data,mode,uid=None,gid=None):
+def atomic_write(path,data,uid=None,gid=None,read_only=False):
     path=Path(path)
     path.parent.mkdir(parents=True,exist_ok=True)
     tmp=path.with_name(path.name+'.pending-'+secrets.token_hex(5))
     try:
-        fd=os.open(tmp,os.O_WRONLY|os.O_CREAT|os.O_EXCL,mode)
+        fd=os.open(tmp,os.O_WRONLY|os.O_CREAT|os.O_EXCL|os.O_NOFOLLOW,0o600)
         with os.fdopen(fd,'wb') as out:
-            out.write(data);out.flush();os.fsync(out.fileno())
-        os.chmod(tmp,mode)
-        if uid is not None and gid is not None:
-            os.chown(tmp,uid,gid)
+            out.write(data);out.flush()
+            if uid is not None and gid is not None:
+                os.fchown(out.fileno(),uid,gid)
+            if read_only:os.fchmod(out.fileno(),0o400)
+            else:os.fchmod(out.fileno(),0o600)
+            os.fsync(out.fileno())
         os.replace(tmp,path)
     finally:
         try:tmp.unlink()
@@ -257,6 +266,48 @@ def ensure_managed_file_paths():
             die(f'Archivo administrativo inseguro (se requiere archivo regular sin enlaces): {path}')
         if st.st_nlink != 1:
             die(f'Archivo administrativo inseguro (no se permiten hardlinks): {path}')
+
+
+def normalize_managed_file_permissions(uid,gid):
+    if ROOT_PREFIX or os.getuid()!=0:
+        return
+    web_account=pwd.getpwnam('www-data')
+    policies=(
+        (ADMIN,uid,gid,True),(CERT,uid,gid,True),(KEY,uid,gid,True),
+        (ACCOUNT_STATE,uid,gid,False),(MARK,0,0,True),
+        (STATUS,web_account.pw_uid,web_account.pw_gid,True),
+    )
+    opened=[]
+    try:
+        # Validate and snapshot every descriptor before changing any metadata.
+        # NONBLOCK prevents an attacker-controlled FIFO replacement from
+        # hanging this privileged setup path; NOFOLLOW rejects symlinks.
+        for path,file_uid,file_gid,read_only in policies:
+            try:
+                fd=os.open(path,os.O_RDONLY|os.O_NOFOLLOW|os.O_NONBLOCK|os.O_CLOEXEC)
+            except FileNotFoundError:
+                continue
+            st=os.fstat(fd)
+            if not stat.S_ISREG(st.st_mode) or st.st_nlink!=1:
+                os.close(fd)
+                die(f'Archivo administrativo inseguro; no se cambiarán sus permisos: {path}')
+            opened.append((fd,st,file_uid,file_gid,read_only))
+        for fd,st,file_uid,file_gid,read_only in opened:
+            os.fchown(fd,file_uid,file_gid)
+            os.fchmod(fd,0o400 if read_only else 0o600)
+    except BaseException:
+        # If normalization fails partway through, restore original ownership
+        # and mode through the already-validated open descriptors.
+        for fd,st,_file_uid,_file_gid,_read_only in reversed(opened):
+            try:
+                os.fchown(fd,st.st_uid,st.st_gid)
+                os.fchmod(fd,stat.S_IMODE(st.st_mode))
+            except OSError:
+                pass
+        raise
+    finally:
+        for fd,_st,_file_uid,_file_gid,_read_only in opened:
+            os.close(fd)
 
 
 def config():
@@ -284,11 +335,10 @@ def persist_cert(cert,key):
     if not cert_same_key(cert,key):die('La clave privada no corresponde al certificado')
     # Copia atómica; nunca exponer privada al servidor HTTP público.
     gid,uid=ensure_prerequisites()
-    for path,target,perm in ((cert,CERT,0o640),(key,KEY,0o640)):
+    for path,target in ((cert,CERT),(key,KEY)):
         can_chown=(os.getuid()==0 and not ROOT_PREFIX)
-        atomic_write(target,Path(path).read_bytes(),perm,
-                     0 if can_chown else None,
-                     gid if can_chown else None)
+        atomic_write(target,Path(path).read_bytes(),uid if can_chown else None,
+                     gid if can_chown else None,read_only=True)
 
 
 def generate_selfsigned(host):
@@ -355,8 +405,8 @@ def letsencrypt():
     hook.parent.mkdir(parents=True,exist_ok=True)
     hook.write_text('#!/bin/sh\nset -eu\n'
        f'[ "${{RENEWED_LINEAGE:-}}" = "/etc/letsencrypt/live/{domain}" ] || exit 0\n'
-       f'install -o root -g sep-admin -m 0640 "${{RENEWED_LINEAGE}}/fullchain.pem" "{CERT}"\n'
-       f'install -o root -g sep-admin -m 0640 "${{RENEWED_LINEAGE}}/privkey.pem" "{KEY}"\n'
+       f'install -o sep-admin -g sep-admin -m 0400 "${{RENEWED_LINEAGE}}/fullchain.pem" "{CERT}"\n'
+       f'install -o sep-admin -g sep-admin -m 0400 "${{RENEWED_LINEAGE}}/privkey.pem" "{KEY}"\n'
        f'/usr/bin/systemctl restart {SERVICE}\n')
     hook.chmod(0o700)
     return domain
@@ -369,14 +419,24 @@ def snapshot(path):
     return (path.read_bytes(),st.st_mode&0o777,st.st_uid,st.st_gid)
 
 
-def restore_snapshot(path,value):
+def restore_snapshot(path,value,gid=None,uid=None):
     path=Path(path)
     if value is None:
         path.unlink(missing_ok=True)
         return
-    data,mode,uid,gid=value
+    data=value[0]
     can_chown=(os.getuid()==0 and not ROOT_PREFIX)
-    atomic_write(path,data,mode,uid if can_chown else None,gid if can_chown else None)
+    read_only=True
+    if path in (ADMIN,CERT,KEY,ACCOUNT_STATE):
+        owner_uid,owner_gid=uid,gid
+        read_only=path!=ACCOUNT_STATE
+    elif path==STATUS:
+        account=pwd.getpwnam('www-data')
+        owner_uid,owner_gid=account.pw_uid,account.pw_gid
+    else:
+        owner_uid,owner_gid=0,0
+    atomic_write(path,data,owner_uid if can_chown else None,
+                 owner_gid if can_chown else None,read_only=read_only)
 
 
 def main():
@@ -400,6 +460,7 @@ def main():
         if directory.is_symlink() or (directory.exists() and not directory.is_dir()):
             die(f'Ruta administrativa insegura: {directory}')
     ensure_managed_file_paths()
+    normalize_managed_file_permissions(uid,gid)
     ROOT.mkdir(parents=True,exist_ok=True)
     if os.getuid()==0 and not ROOT_PREFIX:os.chown(ROOT,0,gid)
     ROOT.chmod(0o750)
@@ -450,14 +511,14 @@ def main():
         if not cert_same_key(CERT,KEY):die('No se pudo verificar el certificado final')
         auth['domain']=domain;auth['port']=port
         can_chown=(os.getuid()==0 and not ROOT_PREFIX)
-        atomic_write(ADMIN,(json.dumps(auth,ensure_ascii=False,indent=2)+'\n').encode(),0o640,
-                     0 if can_chown else None,gid if can_chown else None)
+        atomic_write(ADMIN,(json.dumps(auth,ensure_ascii=False,indent=2)+'\n').encode(),
+                     uid if can_chown else None,gid if can_chown else None,read_only=True)
         STATE.mkdir(mode=0o700,parents=True,exist_ok=True)
         if can_chown:os.chown(STATE,uid,gid)
         STATE.chmod(0o700)
         if change_credentials or not ACCOUNT_STATE.exists():
             account_state={'email':auth['username'],'hash':auth['hash'],'salt':auth['salt']}
-            atomic_write(ACCOUNT_STATE,(json.dumps(account_state)+'\n').encode(),0o600,
+            atomic_write(ACCOUNT_STATE,(json.dumps(account_state)+'\n').encode(),
                          uid if can_chown else None,gid if can_chown else None)
         if ROOT_PREFIX:
             print('Credenciales y certificado preparados en la raíz aislada; no se ha iniciado ni habilitado systemd.')
@@ -477,7 +538,7 @@ def main():
             subprocess.run(['/usr/bin/systemctl','disable','--now',SERVICE],
                            stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL,check=False)
         for path,value in before.items():
-            try:restore_snapshot(path,value)
+            try:restore_snapshot(path,value,gid,uid)
             except OSError:pass
         restore_service_state(was_active,was_enabled)
         if was_marked and not ROOT_PREFIX:
@@ -510,12 +571,11 @@ def recover_locally():
     # Mantener en sincronía el respaldo de root y la cuenta efectiva.
     old.update(username=email,salt=salt,hash=digest)
     tmp=ADMIN.with_name('admin.json.recover-tmp')
-    tmp.write_text(json.dumps(old,ensure_ascii=False,indent=2)+'\n')
-    atomic_write(tmp,(json.dumps(old,ensure_ascii=False,indent=2)+'\n').encode(),0o640,
-                 None if ROOT_PREFIX else 0,None if ROOT_PREFIX else gid)
+    atomic_write(tmp,(json.dumps(old,ensure_ascii=False,indent=2)+'\n').encode(),
+                 None if ROOT_PREFIX else uid,None if ROOT_PREFIX else gid,read_only=True)
     st={'email':email,'hash':digest,'salt':salt}
     tmp=STATE/'account.json.recover-tmp'
-    atomic_write(tmp,(json.dumps(st)+'\n').encode(),0o600,
+    atomic_write(tmp,(json.dumps(st)+'\n').encode(),
                  None if ROOT_PREFIX else uid,None if ROOT_PREFIX else gid)
     (STATE/'password-reset.json').unlink(missing_ok=True)
     (STATE/'pending-email-change.json').unlink(missing_ok=True)

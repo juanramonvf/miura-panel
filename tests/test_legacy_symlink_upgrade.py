@@ -10,7 +10,10 @@ import unittest
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
 VERSION = json.loads((ROOT / "version.json").read_text(encoding="utf-8"))["version"]
-INSTALLER = ROOT / "dist" / f"install-spanish-empire-panel-v{VERSION}.sh"
+INSTALLER = pathlib.Path(os.environ.get(
+    "MIURA_INSTALLER_PATH",
+    ROOT / "dist" / f"install-spanish-empire-panel-v{VERSION}.sh",
+)).resolve()
 V1_0_35_INSTALLER = ROOT / "dist" / "install-spanish-empire-panel-v1.0.35.sh"
 LEGACY_ALIAS = "miura-panel-admin-setup"
 LEGACY_TARGET = "spanish-empire-panel-admin-setup"

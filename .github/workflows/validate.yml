@@ -49,15 +49,6 @@ jobs:
             exit 1
           }
 
-      - name: Test checked-in candidate artifacts
-        if: contains(fromJSON('["refs/heads/development/v1.0.35-candidate","refs/heads/development/v1.0.36-candidate","refs/heads/development/v1.0.37-candidate","refs/heads/development/v1.0.38-candidate","refs/heads/development/v1.0.39-candidate"]'), github.ref)
-        run: |
-          set +e
-          report_file="$RUNNER_TEMP/candidate-test-failures.txt"
-          python scripts/ci/run_unittest.py --run --start-directory tests --report-file "$report_file"
-          test_status=$?
-          exit "$test_status"
-
       - name: Build and exercise package for this version
         env:
           MIURA_RELEASE_VERSION: ${{ github.ref_type == 'tag' && github.ref_name || '' }}
