@@ -24,6 +24,9 @@ jobs:
         with:
           python-version: "3.12"
 
+      - name: Install Python test dependency
+        run: python -m pip install --disable-pip-version-check psutil
+
       - name: Compile Python and check shell syntax
         run: |
           python -m compileall -q .
@@ -46,10 +49,6 @@ jobs:
             exit 1
           }
 
-      - name: Test checked-in candidate artifacts
-        if: contains(fromJSON('["refs/heads/development/v1.0.35-candidate","refs/heads/development/v1.0.36-candidate","refs/heads/development/v1.0.37-candidate","refs/heads/development/v1.0.38-candidate"]'), github.ref)
-        run: python -m unittest discover -s tests -v
-
       - name: Build and exercise package for this version
         env:
           MIURA_RELEASE_VERSION: ${{ github.ref_type == 'tag' && github.ref_name || '' }}
@@ -67,7 +66,7 @@ jobs:
           if [[ -z "$VERSION" ]]; then VERSION="$(python -c 'import json; print(json.load(open("version.json"))["version"])')"; fi
           export MIURA_INSTALLER_PATH="$RUNNER_TEMP/miura-release-package/install-spanish-empire-panel-v${VERSION}.sh"
           export MIURA_MANIFEST_PATH="$RUNNER_TEMP/miura-release-package/miura-panel-update-manifest.json"
-          python -m unittest discover -s tests -v
+          python scripts/ci/run_unittest.py --run --start-directory tests --report-file "$RUNNER_TEMP/generated-package-test-failures.txt"
 
       - name: Upload validated release package
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7

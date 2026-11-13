@@ -224,6 +224,36 @@ class ReleaseArtifactTests(unittest.TestCase):
             self.assertEqual(json.loads((web / "version.json").read_text())["version"], "1.0.34")
             self.assertEqual((web / "rollback-sentinel.txt").read_text(), "old tree\n")
 
+    def test_normal_http_never_serves_admin_login_or_configuration(self):
+        with tempfile.TemporaryDirectory(prefix="miura-normal-http-admin-") as temp:
+            temp_path = pathlib.Path(temp)
+            prefix = temp_path / "root"
+            self.run_installer(prefix, "--normal")
+            installed = prefix / "usr/local/sbin/server-dashboard-live.py"
+            spec = importlib.util.spec_from_file_location(
+                "miura_installed_normal_runtime", installed
+            )
+            module = importlib.util.module_from_spec(spec)
+            with patch.dict(os.environ, {"MIURA_ROOT_PREFIX": str(prefix)}):
+                spec.loader.exec_module(module)
+            server = module.ThreadingHTTPServer(("127.0.0.1", 0), module.Handler)
+            thread = threading.Thread(target=server.serve_forever, daemon=True)
+            thread.start()
+            base = f"http://127.0.0.1:{server.server_address[1]}"
+            try:
+                for path in ("/admin", "/admin.html", "/%61dmin.html",
+                             "/nested/../admin.html", "/admin-login.html", "/admin-reset.html"):
+                    with self.subTest(path=path), self.assertRaises(urllib.error.HTTPError) as error:
+                        urllib.request.urlopen(base + path, timeout=3)
+                    self.assertEqual(error.exception.code, 404)
+                with urllib.request.urlopen(base + "/api/preferences", timeout=3) as response:
+                    self.assertEqual(response.status, 200)
+                    self.assertEqual(json.loads(response.read()), {"servers": [], "disk_aliases": {}})
+            finally:
+                server.shutdown()
+                server.server_close()
+                thread.join(timeout=3)
+
     def test_installed_demo_runtime_serves_fake_data_and_rejects_actions(self):
         with tempfile.TemporaryDirectory(prefix="miura-demo-http-") as temp:
             temp_path = pathlib.Path(temp)
@@ -234,20 +264,7 @@ class ReleaseArtifactTests(unittest.TestCase):
             web = prefix / "var/www/server-dashboard"
             (web / "data.json").write_text('{"hostname":"SERVER-SECRET"}\n', encoding="utf-8")
 
-            # Redirect only the installed runtime's absolute paths to this fixture.
-            config_source = str(config)
-            web_source = str(web)
             source = installed.read_text(encoding="utf-8")
-            source = source.replace(
-                'CONFIG_FILE = Path("/etc/server-dashboard.conf")',
-                f"CONFIG_FILE = Path({config_source!r})",
-                1,
-            )
-            source = source.replace(
-                'WEB_DIR = Path("/var/www/server-dashboard")',
-                f"WEB_DIR = Path({web_source!r})",
-                1,
-            )
             runtime = temp_path / "installed_live_runtime.py"
             runtime.write_text(source, encoding="utf-8")
             spec = importlib.util.spec_from_file_location("miura_installed_demo_runtime", runtime)
@@ -259,7 +276,8 @@ class ReleaseArtifactTests(unittest.TestCase):
                     raise AssertionError(f"demo runtime unexpectedly accessed psutil.{name}")
 
             # The demo route must not need host metrics or a real psutil install.
-            with patch.dict(sys.modules, {"psutil": PsutilForbidden("psutil")}):
+            with patch.dict(sys.modules, {"psutil": PsutilForbidden("psutil")}), \
+                 patch.dict(os.environ, {"MIURA_ROOT_PREFIX": str(prefix)}):
                 spec.loader.exec_module(module)
             self.assertEqual(module.MODE, "demo")
             self.assertEqual(module.BIND_IP, "127.0.0.1")

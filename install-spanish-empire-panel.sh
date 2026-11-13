@@ -11,6 +11,9 @@ STATE_REL='var/lib/server-dashboard'
 PREFS_REL="$STATE_REL/preferences"
 PREFS_FILE_REL="$PREFS_REL/ui.json"
 READ_GROUP='server-dashboard-read'
+ADMIN_GROUP='sep-admin'
+ADMIN_USER='sep-admin'
+ADMIN_STATE_REL='var/lib/spanish-empire-panel-admin'
 ADMIN_UNIT_REL='etc/systemd/system/server-dashboard-admin.service'
 ADMIN_DROPIN_REL='etc/systemd/system/server-dashboard-admin.service.d'
 ADMIN_DROPIN_FILE_REL="$ADMIN_DROPIN_REL/miura-preferences.conf"
@@ -136,6 +139,14 @@ assert_safe_path() {
     [[ ! -e "$current" || -d "$current" ]] || fail "Se esperaba un directorio de instalación: $current"
   done
 }
+assert_safe_root_prefix_systemd_wants() {
+  [[ -n "$ROOT_PREFIX" ]] || return 0
+  # systemctl --root creates/removes entries below these paths. Validate the
+  # target directories and every ancestor before it can follow an external
+  # symlink or write outside the isolated root.
+  assert_safe_path 'etc/systemd/system/multi-user.target.wants'
+  assert_safe_path 'etc/systemd/system/timers.target.wants'
+}
 assert_safe_leaf() {
   [[ ! -L "$1" ]] || fail "No se permite un enlace simbólico en un archivo gestionado: $1"
   [[ ! -e "$1" || -f "$1" ]] || fail "El destino gestionado debe ser un archivo regular: $1"
@@ -216,6 +227,7 @@ assert_safe_managed_leaf() {
 assert_safe_path "$BACKUP_REL"
 assert_safe_path "$WEB_REL"
 assert_safe_path "$STATE_REL"
+assert_safe_path "$ADMIN_STATE_REL"
 assert_safe_path "$PREFS_REL"
 assert_safe_path "$ADMIN_DROPIN_REL"
 assert_safe_path "$BIN_REL"
@@ -234,10 +246,12 @@ for rel in \
   var/backups/server-dashboard/latest \
   etc/systemd/system/server-dashboard-web.service \
   etc/systemd/system/server-dashboard-collector.service \
-  etc/systemd/system/server-dashboard-collector.timer; do
+  etc/systemd/system/server-dashboard-collector.timer \
+  etc/systemd/system/server-dashboard-admin.service; do
   assert_safe_managed_leaf "$(root_path "$rel")"
 done
 ADMIN_UNIT_PRESENT=0
+ADMIN_UNIT_MANAGED=0
 if [[ -n "$ROOT_PREFIX" ]]; then
   for candidate in \
     "$(root_path "$ADMIN_UNIT_REL")" \
@@ -247,6 +261,22 @@ if [[ -n "$ROOT_PREFIX" ]]; then
   done
 elif systemctl cat server-dashboard-admin.service >/dev/null 2>&1; then
   ADMIN_UNIT_PRESENT=1
+fi
+if ((ADMIN_UNIT_PRESENT)); then
+  for candidate in \
+    "$(root_path "$ADMIN_UNIT_REL")" \
+    "$(root_path usr/lib/systemd/system/server-dashboard-admin.service)" \
+    "$(root_path lib/systemd/system/server-dashboard-admin.service)"; do
+    if [[ -f "$candidate" && ! -L "$candidate" ]] && \
+       grep -Fqx 'User=sep-admin' "$candidate" && \
+       grep -Fqx 'Group=sep-admin' "$candidate" && \
+       grep -Fqx 'ExecStart=/usr/bin/python3 /usr/local/sbin/server-dashboard-admin.py' "$candidate" && \
+       grep -Fqx 'ProtectSystem=strict' "$candidate" && \
+       grep -Fqx 'ReadWritePaths=/var/lib/server-dashboard/preferences' "$candidate"; then
+      ADMIN_UNIT_MANAGED=1
+      break
+    fi
+  done
 fi
 if ((ADMIN_UNIT_PRESENT)) && [[ -e "$(root_path "$ADMIN_DROPIN_FILE_REL")" ]]; then
   printf '[Service]\nSupplementaryGroups=server-dashboard-prefs\nSupplementaryGroups=%s\nReadWritePaths=/var/lib/server-dashboard/preferences\n' "$READ_GROUP" |
@@ -283,11 +313,181 @@ if [[ -z "$ROOT_PREFIX" ]]; then
   READ_GROUP_MEMBERS="${READ_GROUP_ENTRY##*:}"
   [[ -z "$READ_GROUP_MEMBERS" ]] || fail "El grupo $READ_GROUP debe estar vacío; solo se concede por las unidades systemd gestionadas"
   READ_GID="$(cut -d: -f3 <<< "$READ_GROUP_ENTRY")"
+  if getent passwd "$ADMIN_USER" >/dev/null && ! getent group "$ADMIN_GROUP" >/dev/null; then
+    fail "La cuenta $ADMIN_USER existe sin su grupo $ADMIN_GROUP; revisa esa cuenta antes de instalar"
+  fi
+  if ! getent group "$ADMIN_GROUP" >/dev/null; then
+    command -v groupadd >/dev/null || fail "Falta groupadd para crear el grupo $ADMIN_GROUP"
+    groupadd --system "$ADMIN_GROUP" || fail "No se pudo crear el grupo $ADMIN_GROUP"
+  fi
+  ADMIN_GROUP_ENTRY="$(getent group "$ADMIN_GROUP")" || fail "No se encuentra el grupo $ADMIN_GROUP"
+  ADMIN_GID="$(cut -d: -f3 <<< "$ADMIN_GROUP_ENTRY")"
+  ADMIN_GROUP_MEMBERS="${ADMIN_GROUP_ENTRY##*:}"
+  [[ -z "$ADMIN_GROUP_MEMBERS" ]] || fail "El grupo $ADMIN_GROUP debe estar vacío; se usa como grupo primario dedicado"
+  if ! getent passwd "$ADMIN_USER" >/dev/null; then
+    command -v useradd >/dev/null || fail "Falta useradd para crear la cuenta $ADMIN_USER"
+    useradd --system --no-create-home --gid "$ADMIN_GROUP" \
+      --home-dir "/$ADMIN_STATE_REL" --shell /usr/sbin/nologin "$ADMIN_USER" ||
+      fail "No se pudo crear la cuenta de servicio $ADMIN_USER"
+  fi
+  ADMIN_PASSWD_ENTRY="$(getent passwd "$ADMIN_USER")" || fail "No se encuentra la cuenta $ADMIN_USER"
+  ADMIN_UID="$(cut -d: -f3 <<< "$ADMIN_PASSWD_ENTRY")"
+  ADMIN_USER_GID="$(cut -d: -f4 <<< "$ADMIN_PASSWD_ENTRY")"
+  ADMIN_SHELL="$(cut -d: -f7 <<< "$ADMIN_PASSWD_ENTRY")"
+  [[ "$ADMIN_USER_GID" == "$ADMIN_GID" ]] || fail "La cuenta $ADMIN_USER no usa su grupo primario dedicado"
+  [[ "$ADMIN_SHELL" == /usr/sbin/nologin || "$ADMIN_SHELL" == /bin/false ]] ||
+    fail "La cuenta $ADMIN_USER debe tener una shell no interactiva"
+  ADMIN_USER_GROUPS="$(id -Gn "$ADMIN_USER")" || fail "No se pudieron comprobar los grupos de $ADMIN_USER"
+  [[ "$ADMIN_USER_GROUPS" == "$ADMIN_GROUP" ]] ||
+    fail "La cuenta $ADMIN_USER pertenece a grupos adicionales; revísala antes de instalar"
 else
   # Isolated root-prefix runs do not create host groups. Reuse www-data's
   # numeric gid solely inside the fixture so effective traversal can be tested.
   READ_GID="$(getent group "$READ_GROUP" | cut -d: -f3 || true)"
   if [[ -z "$READ_GID" ]]; then READ_GID="$(getent group www-data | cut -d: -f3 || true)"; fi
+  ADMIN_GID="$(getent group "$ADMIN_GROUP" | cut -d: -f3 || true)"
+  ADMIN_UID="$(getent passwd "$ADMIN_USER" | cut -d: -f3 || true)"
+  ADMIN_GID="${ADMIN_GID:-$READ_GID}"
+  ADMIN_UID="${ADMIN_UID:-29994}"
+  if [[ -n "$ROOT_PREFIX" ]]; then
+    ADMIN_GID="${ADMIN_GID:-29994}"
+    ADMIN_UID="${ADMIN_UID:-29994}"
+    python3 - "$ROOT_PREFIX" "$ADMIN_UID" "$ADMIN_GID" "$ADMIN_USER" "$ADMIN_GROUP" "$ADMIN_STATE_REL" <<'PY'
+import os, pathlib, stat, sys
+uid=int(sys.argv[2]); gid=int(sys.argv[3])
+user,group,home=sys.argv[4:]
+
+def fail(message):
+    raise SystemExit(message)
+
+root_arg=pathlib.Path(os.path.abspath(sys.argv[1]))
+try:
+    root=root_arg.resolve(strict=True)
+except OSError as exc:
+    fail('No se pudo resolver el root prefix para las cuentas ficticias: '+str(exc))
+if root != root_arg or not root.is_dir():
+    fail('El root prefix para las cuentas ficticias debe ser un directorio físico')
+
+directory=os.O_RDONLY | getattr(os,'O_DIRECTORY',0) | getattr(os,'O_CLOEXEC',0) | getattr(os,'O_NOFOLLOW',0)
+no_follow=getattr(os,'O_NOFOLLOW',0)
+if not no_follow or not getattr(os,'O_DIRECTORY',0):
+    fail('La plataforma no permite abrir de forma segura los archivos de cuentas del root prefix')
+try:
+    root_fd=os.open(root, directory)
+except OSError as exc:
+    fail('No se pudo abrir el root prefix de forma segura: '+str(exc))
+etc_fd=None
+try:
+    try:
+        etc_stat=os.stat('etc',dir_fd=root_fd,follow_symlinks=False)
+    except FileNotFoundError:
+        os.mkdir('etc',0o755,dir_fd=root_fd)
+        etc_stat=os.stat('etc',dir_fd=root_fd,follow_symlinks=False)
+    if not stat.S_ISDIR(etc_stat.st_mode):
+        fail('La ruta etc del root prefix debe ser un directorio regular, no un enlace')
+    etc_path=root/'etc'
+    if etc_path.resolve(strict=True) != etc_path:
+        fail('La ruta etc escapa del root prefix')
+    etc_fd=os.open('etc',directory,dir_fd=root_fd)
+    opened_etc=os.fstat(etc_fd)
+    if not stat.S_ISDIR(opened_etc.st_mode) or (opened_etc.st_dev,opened_etc.st_ino)!=(etc_stat.st_dev,etc_stat.st_ino):
+        fail('La ruta etc del root prefix cambió durante la validación')
+
+    # Validate both account databases before opening either one. This prevents
+    # a bad group path from being discovered after passwd has already changed.
+    databases={}
+    for name in ('passwd','group'):
+        try:
+            st=os.stat(name,dir_fd=etc_fd,follow_symlinks=False)
+        except FileNotFoundError:
+            databases[name]=(None,[])
+            continue
+        if not stat.S_ISREG(st.st_mode):
+            fail(f'El archivo etc/{name} del root prefix debe ser regular y no simbólico')
+        if st.st_nlink != 1:
+            fail(f'El archivo etc/{name} del root prefix no puede tener enlaces duros')
+        databases[name]=(st,None)
+
+    def read_database(name, expected):
+        if expected is None:
+            return []
+        fd=os.open(name,os.O_RDONLY|no_follow|getattr(os,'O_CLOEXEC',0),dir_fd=etc_fd)
+        try:
+            opened=os.fstat(fd)
+            if (not stat.S_ISREG(opened.st_mode) or opened.st_nlink != 1 or
+                    (opened.st_dev,opened.st_ino)!=(expected.st_dev,expected.st_ino)):
+                fail(f'El archivo etc/{name} del root prefix cambió durante la validación')
+            chunks=[]
+            while True:
+                data=os.read(fd,65536)
+                if not data: break
+                chunks.append(data)
+            return b''.join(chunks).decode('utf-8').splitlines()
+        finally:
+            os.close(fd)
+
+    passwd_stat,passwd_lines=databases['passwd']
+    group_stat,group_lines=databases['group']
+    if passwd_lines is None: passwd_lines=read_database('passwd',passwd_stat)
+    if group_lines is None: group_lines=read_database('group',group_stat)
+
+    user_rows=[line.split(':') for line in passwd_lines if line.split(':',1)[0]==user]
+    passwd_changed=False
+    if user_rows:
+        if (len(user_rows)!=1 or len(user_rows[0])<7 or not user_rows[0][2].isdigit() or
+                not user_rows[0][3].isdigit() or int(user_rows[0][2])!=uid or
+                int(user_rows[0][3])!=gid or user_rows[0][6] not in ('/usr/sbin/nologin','/bin/false')):
+            fail('La cuenta ficticia sep-admin del root prefix no coincide con el modelo del servicio')
+    else:
+        if any(len(row:=line.split(':'))>2 and row[2].isdigit() and int(row[2])==uid for line in passwd_lines):
+            fail('UID de sep-admin duplicado en el root prefix')
+        passwd_lines.append(f'{user}:x:{uid}:{gid}::/{home}:/usr/sbin/nologin')
+        passwd_changed=True
+
+    group_rows=[line.split(':') for line in group_lines if line.split(':',1)[0]==group]
+    group_changed=False
+    if group_rows:
+        if (len(group_rows)!=1 or len(group_rows[0])<4 or not group_rows[0][2].isdigit() or
+                int(group_rows[0][2])!=gid or group_rows[0][3]):
+            fail('El grupo ficticio sep-admin del root prefix no coincide con el modelo dedicado')
+    else:
+        if any(len(row:=line.split(':'))>2 and row[2].isdigit() and int(row[2])==gid for line in group_lines):
+            fail('GID de sep-admin duplicado en el root prefix')
+        group_lines.append(f'{group}:x:{gid}:')
+        group_changed=True
+
+    def write_database(name, expected, lines):
+        flags=os.O_WRONLY|no_follow|getattr(os,'O_CLOEXEC',0)
+        if expected is None:
+            flags |= os.O_CREAT|os.O_EXCL
+        else:
+            current=os.stat(name,dir_fd=etc_fd,follow_symlinks=False)
+            if (not stat.S_ISREG(current.st_mode) or current.st_nlink != 1 or
+                    (current.st_dev,current.st_ino)!=(expected.st_dev,expected.st_ino)):
+                fail(f'El archivo etc/{name} del root prefix cambió antes de escribir')
+        fd=os.open(name,flags,0o644,dir_fd=etc_fd)
+        try:
+            opened=os.fstat(fd)
+            if not stat.S_ISREG(opened.st_mode) or opened.st_nlink != 1:
+                fail(f'El archivo etc/{name} del root prefix dejó de ser regular y exclusivo')
+            if expected is not None and (opened.st_dev,opened.st_ino)!=(expected.st_dev,expected.st_ino):
+                fail(f'El archivo etc/{name} del root prefix cambió durante la apertura')
+            os.ftruncate(fd,0)
+            data=('\n'.join(lines)+'\n').encode('utf-8')
+            offset=0
+            while offset<len(data): offset += os.write(fd,data[offset:])
+        finally:
+            os.close(fd)
+
+    # No database is written until both paths have passed lstat-like checks,
+    # safe opens, and account/group consistency validation.
+    if passwd_changed: write_database('passwd',passwd_stat,passwd_lines)
+    if group_changed: write_database('group',group_stat,group_lines)
+finally:
+    if etc_fd is not None: os.close(etc_fd)
+    os.close(root_fd)
+PY
+  fi
 fi
 prepare_web_parent() {
   local boundary current_parent parent_uid parent_gid parent_mode
@@ -335,6 +535,7 @@ STATE="$(root_path "$STATE_REL")"
 BACKUPS="$(root_path "$BACKUP_REL")"
 
 if ((ROLLBACK_REQUESTED)); then
+  assert_safe_root_prefix_systemd_wants
   [[ -n "$ROLLBACK" ]] || ROLLBACK="$BACKUPS/latest"
   if [[ "$ROLLBACK" == "$BACKUPS/latest" ]]; then
     assert_safe_leaf "$ROLLBACK"
@@ -368,6 +569,7 @@ managed = {
     'etc/systemd/system/server-dashboard-web.service',
     'etc/systemd/system/server-dashboard-collector.service',
     'etc/systemd/system/server-dashboard-collector.timer',
+    'etc/systemd/system/server-dashboard-admin.service',
     'usr/local/sbin/server-dashboard-collect.py',
     'usr/local/sbin/server-dashboard-live.py',
     'usr/local/sbin/server-dashboard-admin.py',
@@ -454,6 +656,19 @@ with tempfile.TemporaryDirectory(prefix='miura-rollback-') as temp_name:
             }:
                 os.chown(dest, 0, read_gid)
                 dest.chmod(0o750)
+    admin_units = [
+        root / 'etc/systemd/system/server-dashboard-admin.service',
+        root / 'usr/lib/systemd/system/server-dashboard-admin.service',
+        root / 'lib/systemd/system/server-dashboard-admin.service',
+    ]
+    if not any(path.is_file() and not path.is_symlink() for path in admin_units):
+        (root / 'etc/spanish-empire-panel/admin-enabled').unlink(missing_ok=True)
+        (root / 'var/www/server-dashboard/admin-status.json').unlink(missing_ok=True)
+        enabled = root / 'etc/systemd/system/multi-user.target.wants/server-dashboard-admin.service'
+        if enabled.is_symlink() and os.readlink(enabled) in (
+                '/etc/systemd/system/server-dashboard-admin.service',
+                '../server-dashboard-admin.service'):
+            enabled.unlink()
     if os.geteuid() == 0 and read_gid >= 0:
         conf = root / 'etc/server-dashboard.conf'
         if conf.is_file() and not conf.is_symlink():
@@ -493,10 +708,27 @@ PY
     systemctl daemon-reload
     systemctl restart server-dashboard-web.service
     systemctl enable --now server-dashboard-collector.timer
-    if systemctl cat server-dashboard-admin.service >/dev/null 2>&1 &&
-       [[ -f "$(root_path "$ADMIN_DROPIN_FILE_REL")" ]] &&
-       systemctl is-active --quiet server-dashboard-admin.service; then
+    if { [[ -f "$(root_path "$ADMIN_UNIT_REL")" ]] ||
+         [[ -f "$(root_path usr/lib/systemd/system/server-dashboard-admin.service)" ]] ||
+         [[ -f "$(root_path lib/systemd/system/server-dashboard-admin.service)" ]]; } &&
+       [[ -s /etc/spanish-empire-panel/admin.json &&
+          -s /etc/spanish-empire-panel/admin.crt && -s /etc/spanish-empire-panel/admin.key ]]; then
+      systemctl enable --now server-dashboard-admin.service
       systemctl restart server-dashboard-admin.service
+    else
+      systemctl disable --now server-dashboard-admin.service >/dev/null 2>&1 || true
+    fi
+  elif [[ -n "$ROOT_PREFIX" ]] && command -v systemctl >/dev/null; then
+    assert_safe_root_prefix_systemd_wants
+    systemctl --root="$ROOT_PREFIX" enable server-dashboard-web.service server-dashboard-collector.timer >/dev/null
+    if [[ -f "$(root_path etc/spanish-empire-panel/admin-enabled)" &&
+          -s "$(root_path etc/spanish-empire-panel/admin.json)" &&
+          -s "$(root_path etc/spanish-empire-panel/admin.crt)" &&
+          -s "$(root_path etc/spanish-empire-panel/admin.key)" &&
+          -f "$(root_path "$ADMIN_UNIT_REL")" ]]; then
+      systemctl --root="$ROOT_PREFIX" enable server-dashboard-admin.service >/dev/null
+    else
+      systemctl --root="$ROOT_PREFIX" disable server-dashboard-admin.service >/dev/null 2>&1 || true
     fi
   fi
   printf 'Rollback completado desde %s\n' "$ROLLBACK"
@@ -534,6 +766,25 @@ for file in "${FILES[@]}"; do [[ -f "$SCRIPT_DIR/$file" ]] || fail "Falta archiv
 PY_FILES=(collect.py live.py admin-web.py admin-setup.py admin-fleet.py fleet.py fleet-docker.py fleet-receiver.py docker-action.py docker-updates.py update.py)
 for file in "${PY_FILES[@]}"; do [[ -f "$SCRIPT_DIR/$file" ]] || fail "Falta archivo de aplicación: $file"; done
 mkdir -p "$BACKUPS" "$WEB" "$BIN" "$STATE"
+ADMIN_STATE="$(root_path "$ADMIN_STATE_REL")"
+if [[ -z "$ROOT_PREFIX" ]]; then
+  if [[ -e "$ADMIN_STATE" && -L "$ADMIN_STATE" ]]; then fail 'El estado administrativo no puede ser un enlace simbólico'; fi
+  mkdir -p "$ADMIN_STATE"
+  if find "$ADMIN_STATE" -type l -print -quit | grep -q .; then
+    fail 'El estado administrativo contiene enlaces simbólicos; no se cambiarán sus permisos'
+  fi
+  chown -R "$ADMIN_USER:$ADMIN_GROUP" "$ADMIN_STATE"
+  find "$ADMIN_STATE" -type d -exec chmod 0700 {} +
+  chown "$ADMIN_USER:$ADMIN_GROUP" "$ADMIN_STATE"
+  chmod 0700 "$ADMIN_STATE"
+else
+  mkdir -p "$ADMIN_STATE"
+  if (( EUID == 0 )) && getent passwd "$ADMIN_USER" >/dev/null && getent group "$ADMIN_GROUP" >/dev/null; then
+    chown -R "$ADMIN_USER:$ADMIN_GROUP" "$ADMIN_STATE"
+  fi
+  chmod 0700 "$ADMIN_STATE"
+fi
+find "$ADMIN_STATE" -type f -exec chmod 0600 {} +
 PREFS_DIR="$(root_path "$PREFS_REL")"
 PREFS_FILE="$(root_path "$PREFS_FILE_REL")"
 mkdir -p "$PREFS_DIR"
@@ -584,6 +835,7 @@ BACKUP_PATHS=(
   etc/systemd/system/server-dashboard-web.service
   etc/systemd/system/server-dashboard-collector.service
   etc/systemd/system/server-dashboard-collector.timer
+  etc/systemd/system/server-dashboard-admin.service
   usr/local/sbin/server-dashboard-collect.py
   usr/local/sbin/server-dashboard-live.py
   usr/local/sbin/server-dashboard-admin.py
@@ -802,6 +1054,7 @@ NoNewPrivileges=true
 PrivateTmp=true
 ProtectSystem=strict
 ProtectHome=true
+UnsetEnvironment=MIURA_ROOT_PREFIX
 ReadWritePaths=/var/lib/server-dashboard/preferences
 
 [Install]
@@ -833,8 +1086,43 @@ Unit=server-dashboard-collector.service
 [Install]
 WantedBy=timers.target
 EOF
+if (( ! ADMIN_UNIT_PRESENT )); then
+cat > "$(root_path "$ADMIN_UNIT_REL")" <<'EOF'
+[Unit]
+Description=Miura Panel authenticated HTTPS administration
+After=network.target
 
-if ((ADMIN_UNIT_PRESENT)); then
+[Service]
+Type=simple
+User=sep-admin
+Group=sep-admin
+SupplementaryGroups=server-dashboard-read server-dashboard-prefs
+WorkingDirectory=/var/www/server-dashboard
+ExecStartPre=/usr/bin/test -s /etc/spanish-empire-panel/admin.json
+ExecStartPre=/usr/bin/test -s /etc/spanish-empire-panel/admin.crt
+ExecStartPre=/usr/bin/test -s /etc/spanish-empire-panel/admin.key
+ExecStart=/usr/bin/python3 /usr/local/sbin/server-dashboard-admin.py
+Restart=on-failure
+RestartSec=3
+UMask=0077
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+UnsetEnvironment=MIURA_ROOT_PREFIX
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+StateDirectory=spanish-empire-panel-admin
+StateDirectoryMode=0700
+ReadWritePaths=/var/lib/server-dashboard/preferences
+
+[Install]
+WantedBy=multi-user.target
+EOF
+fi
+
+if ((ADMIN_UNIT_PRESENT && ! ADMIN_UNIT_MANAGED)); then
   assert_safe_path "$ADMIN_DROPIN_REL"
   ADMIN_DROPIN_DIR="$(root_path "$ADMIN_DROPIN_REL")"
   ADMIN_DROPIN_FILE="$(root_path "$ADMIN_DROPIN_FILE_REL")"
@@ -865,12 +1153,35 @@ if [[ -z "$ROOT_PREFIX" ]] && command -v systemctl >/dev/null; then
   systemctl daemon-reload
   systemctl enable --now server-dashboard-web.service server-dashboard-collector.timer
   systemctl restart server-dashboard-web.service
-  if ((ADMIN_UNIT_PRESENT)) && systemctl is-active --quiet server-dashboard-admin.service; then
+  if [[ -f /etc/spanish-empire-panel/admin-enabled && -s /etc/spanish-empire-panel/admin.json &&
+        -s /etc/spanish-empire-panel/admin.crt && -s /etc/spanish-empire-panel/admin.key ]]; then
+    systemctl enable --now server-dashboard-admin.service
     systemctl restart server-dashboard-admin.service
+  else
+    systemctl disable --now server-dashboard-admin.service >/dev/null 2>&1 || true
+  fi
+elif [[ -n "$ROOT_PREFIX" ]] && command -v systemctl >/dev/null; then
+  # --root edits only the isolated filesystem's boot wants links; it never
+  # contacts or changes the host system manager.
+  assert_safe_root_prefix_systemd_wants
+  systemctl --root="$ROOT_PREFIX" enable server-dashboard-web.service server-dashboard-collector.timer >/dev/null
+  if [[ -f "$(root_path etc/spanish-empire-panel/admin-enabled)" &&
+        -s "$(root_path etc/spanish-empire-panel/admin.json)" &&
+        -s "$(root_path etc/spanish-empire-panel/admin.crt)" &&
+        -s "$(root_path etc/spanish-empire-panel/admin.key)" ]]; then
+    systemctl --root="$ROOT_PREFIX" enable server-dashboard-admin.service >/dev/null
+  else
+    systemctl --root="$ROOT_PREFIX" disable server-dashboard-admin.service >/dev/null 2>&1 || true
   fi
 fi
 rm -rf "$OLD_HOLDER"
 OLD_WEB=''
 OLD_HOLDER=''
 printf 'Miura Panel v%s instalado en modo %s. Copia previa: %s\n' "$VERSION" "$MODE" "$BACKUP"
+if [[ "$MODE" == demo ]]; then
+  printf 'La administración HTTPS permanece desactivada en modo demo. Cambia explícitamente a modo normal antes de configurarla.\n'
+elif [[ ! -f "$(root_path etc/spanish-empire-panel/admin-enabled)" ]]; then
+  printf 'Para activar administración HTTPS por primera vez, ejecuta: sudo miura-panel-admin-setup\n'
+  printf 'El asistente configurará credenciales y certificado antes de habilitar el servicio HTTPS.\n'
+fi
 exit 0

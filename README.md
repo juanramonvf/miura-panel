@@ -1,51 +1,49 @@
 # Miura Panel
 
-Miura Panel es una herramienta gratuita y de código abierto para consultar y administrar servidores propios.
+Miura Panel presenta información del sistema mediante HTTP de solo lectura y permite configurar el acceso administrativo mediante HTTPS autenticado.
 
-**Alcance de esta candidata:** el instalador activa únicamente el panel web de solo lectura y el recolector. Los módulos de administración HTTPS, SSH/fleet y Docker permanecen en el código fuente, pero esta candidata no configura sus servicios ni privilegios.
+## v1.0.39 candidate
 
-## Funciones
+El instalador crea las cuentas y unidades necesarias. HTTP escucha en `127.0.0.1:8766` por defecto. El servicio administrativo HTTPS queda deshabilitado hasta completar la configuración inicial.
 
-- Panel de estado del servidor.
-- Administración autenticada mediante HTTPS.
-- Gestión de equipos remotos mediante SSH restringido.
-- Funciones de supervisión y administración de Docker.
-- Sistema de actualizaciones versionadas.
-
-## Miura Panel v1.0.38 (candidata)
-
-La candidata instala el panel de solo lectura en modo normal o demo. El instalador incluido puede ejecutarse sin red desde este árbol de fuentes. `build-installer.sh` crea un instalador shell autocontenido en `dist/`, junto con su suma SHA256.
-
-Para ejecutar el instalador autocontenido desde `dist/`, verifica y ejecuta `install-spanish-empire-panel-v1.0.38.sh`:
+Verifica y ejecuta el instalador autocontenido:
 
 ```sh
-(cd dist && sha256sum -c install-spanish-empire-panel-v1.0.38.sh.sha256)
-sudo ./dist/install-spanish-empire-panel-v1.0.38.sh --demo
+(cd dist && sha256sum -c install-spanish-empire-panel-v1.0.39.sh.sha256)
+sudo ./dist/install-spanish-empire-panel-v1.0.39.sh --normal
 ```
+
+Al terminar, configura el administrador desde la consola local:
 
 ```sh
-sudo ./install-spanish-empire-panel.sh --normal
-sudo ./install-spanish-empire-panel.sh --demo
-sudo ./install-spanish-empire-panel.sh --upgrade
-sudo ./install-spanish-empire-panel.sh --rollback
+sudo miura-panel-admin-setup
 ```
 
-`--upgrade` conserva `DASHBOARD_MODE` y el resto de `/etc/server-dashboard.conf`. Las copias anteriores se guardan bajo `/var/backups/server-dashboard/`. La configuración y el modo demo persisten aunque se actualice el código.
+El asistente pide el correo y la contraseña, y después configura el certificado. El certificado local es la opción predeterminada; el navegador mostrará una advertencia que requiere aceptar o importar el certificado. Con la configuración inicial, el panel HTTPS está en `https://127.0.0.1:8767/` y solo es accesible desde el servidor. Para permitir acceso desde una red privada, configura `DASHBOARD_BIND_IP` con la dirección LAN del servidor antes de ejecutar el asistente y limita el acceso con tu firewall. Miura Panel no abre puertos.
 
-Requisitos del destino: Debian o Ubuntu con systemd, `/usr/bin/python3` y el módulo del sistema `psutil` (`python3-psutil`). El instalador comprueba estos requisitos antes de cambiar el sistema; no descarga paquetes ni abre puertos de firewall. El panel HTTP de lectura se sirve en el puerto 8766 y, por defecto, solo acepta conexiones locales (`127.0.0.1`). En una actualización, el instalador conserva el resto de la configuración y cambia el antiguo valor comodín `DASHBOARD_BIND_IP=0.0.0.0` a loopback, porque el panel HTTP no requiere autenticación y muestra datos del servidor. Para permitir acceso desde otra interfaz, configura explícitamente una dirección adecuada y protege el acceso en la red.
+La unidad administrativa se habilita únicamente después de guardar las credenciales y comprobar que el login HTTPS responde. El instalador no activa administración en modo demo; `DASHBOARD_MODE=demo` se conserva en las actualizaciones. Cambia deliberadamente a modo normal antes de configurar HTTPS.
 
-Para validar el instalador sin tocar el sistema anfitrión, define `MIURA_ROOT_PREFIX` con una ruta temporal. Ese modo instala archivos y unidades en la raíz indicada, pero no ejecuta systemd.
+En instalaciones que ya tienen una unidad administrativa local, el instalador la conserva. Antes de escribir credenciales, el asistente comprueba que la unidad use `sep-admin`, ejecute el helper de Miura y mantenga el sandbox de escritura limitado. Una unidad local incompatible se deja intacta y el asistente se niega a activarla.
 
-## Licencia
+```sh
+sudo ./install-spanish-empire-panel-v1.0.39.sh --upgrade
+sudo ./install-spanish-empire-panel-v1.0.39.sh --rollback
+```
 
-Código fuente: GNU General Public License v3.0. Consulta [LICENSE](LICENSE).
+Las actualizaciones conservan `/etc/server-dashboard.conf`, las credenciales cifradas mediante hash, los certificados y el estado administrativo. Las copias se guardan bajo `/var/backups/server-dashboard/`. El rollback restaura la unidad de la versión anterior; si esa versión no incluía administración HTTPS, conserva los datos y deja el acceso desactivado.
 
-El nombre y el logotipo Miura tienen condiciones de uso independientes. Consulta [TRADEMARKS.md](TRADEMARKS.md).
+## Pruebas aisladas
 
-## Seguridad
+Para instalar en un prefijo temporal sin iniciar servicios del anfitrión:
 
-No publiques contraseñas, claves SSH, tokens ni archivos de configuración personales.
+```sh
+MIURA_ROOT_PREFIX=/tmp/miura-test-root bash dist/install-spanish-empire-panel-v1.0.39.sh --normal
+```
 
-## Colaboraciones
+En ese modo, el instalador usa `systemctl --root` solo para preparar enlaces de arranque bajo el prefijo. No arranca ni modifica el gestor systemd del anfitrión.
 
-Las mejoras y correcciones podrán proponerse mediante Pull Requests una vez abierto el repositorio oficial.
+Requisitos del destino: Debian o Ubuntu con systemd, Python 3, `python3-psutil`, `openssl`, `groupadd` y `useradd`. El instalador no descarga paquetes ni cambia el firewall. La cuenta de servicio `sep-admin` no tiene shell interactiva; HTTP sigue siendo de solo lectura.
+
+## Licencia y marca
+
+Código fuente: GNU GPL v3. Consulta [LICENSE](LICENSE). El nombre y logotipo Miura tienen condiciones independientes en [TRADEMARKS.md](TRADEMARKS.md).

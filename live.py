@@ -5,6 +5,7 @@ import ipaddress
 import tempfile
 import threading
 import urllib.parse
+import posixpath
 import os
 import re
 import socket
@@ -16,7 +17,13 @@ from pathlib import Path
 
 import psutil
 
-CONFIG_FILE = Path("/etc/server-dashboard.conf")
+ROOT_PREFIX = Path(os.environ["MIURA_ROOT_PREFIX"]).resolve() if os.environ.get("MIURA_ROOT_PREFIX") else None
+
+def rooted(path):
+    path = Path(path)
+    return ROOT_PREFIX / str(path).lstrip("/") if ROOT_PREFIX else path
+
+CONFIG_FILE = rooted("/etc/server-dashboard.conf")
 
 
 def load_dashboard_config():
@@ -49,13 +56,14 @@ try:
 except ValueError:
     PORT = 8766
 
-WEB_DIR = Path("/var/www/server-dashboard")
+WEB_DIR = rooted("/var/www/server-dashboard")
 ACTION_SOCKET = "/run/server-dashboard/docker-action.sock"
-PREF_DIR = Path("/var/lib/server-dashboard/preferences")
+PREF_DIR = rooted("/var/lib/server-dashboard/preferences")
 PREF_FILE = PREF_DIR / "ui.json"
 PREF_LOCK = threading.Lock()
 ADMIN_MODE = False
-ADMIN_ACTIVE = Path("/var/www/server-dashboard/admin-status.json")
+ADMIN_ACTIVE = rooted("/var/www/server-dashboard/admin-status.json")
+ADMIN_ONLY_PATHS = {"/admin", "/admin.html", "/admin-login.html", "/admin-reset.html"}
 
 
 def validate_servers(value):
@@ -484,6 +492,10 @@ DEMO_HISTORY = [{"ts": 1760000000 - n * 300, "time": "2025-10-09T12:00:00+02:00"
 
 
 class Handler(SimpleHTTPRequestHandler):
+    def _request_path(self):
+        path = urllib.parse.unquote(urllib.parse.urlsplit(self.path).path)
+        return posixpath.normpath("/" + path.lstrip("/"))
+
     def end_headers(self):
         self.send_header("Cache-Control", "no-store, no-cache, must-revalidate, max-age=0")
         self.send_header("Pragma", "no-cache")
@@ -495,7 +507,10 @@ class Handler(SimpleHTTPRequestHandler):
         return
 
     def do_GET(self):
-        path = urllib.parse.urlsplit(self.path).path
+        path = self._request_path()
+        if path in ADMIN_ONLY_PATHS:
+            self.send_error(404)
+            return
         if MODE == "demo" and path not in {
                 "/", "/index.html", "/assets/sep-logo.png", "/api/mode",
                 "/api/live", "/api/preferences", "/data.json",
@@ -529,8 +544,11 @@ class Handler(SimpleHTTPRequestHandler):
         super().do_GET()
 
     def do_HEAD(self):
+        path = self._request_path()
+        if path in ADMIN_ONLY_PATHS:
+            self.send_error(404)
+            return
         if MODE == "demo":
-            path = urllib.parse.urlsplit(self.path).path
             if path not in ("/", "/index.html", "/assets/sep-logo.png"):
                 self.send_error(404)
                 return

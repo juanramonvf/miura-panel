@@ -8,6 +8,7 @@ on:
       - development/v1.0.36-candidate
       - development/v1.0.37-candidate
       - development/v1.0.38-candidate
+      - development/v1.0.39-candidate
   pull_request:
     branches:
       - main
@@ -15,6 +16,7 @@ on:
       - development/v1.0.36-candidate
       - development/v1.0.37-candidate
       - development/v1.0.38-candidate
+      - development/v1.0.39-candidate
   workflow_dispatch:
 
 permissions:
