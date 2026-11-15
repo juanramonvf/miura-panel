@@ -86,12 +86,22 @@ jobs:
         needs.recovery_guard.result == 'success'))
     runs-on: ubuntu-24.04
     environment: release-publishing
+    concurrency:
+      group: miura-release-${{ github.event_name == 'workflow_dispatch' && inputs.release_tag || github.ref_name }}
+      cancel-in-progress: false
     permissions:
       contents: write
     env:
       GH_REPO: juanramonvf/miura-panel
       MIURA_RELEASE_TAG: ${{ github.event_name == 'workflow_dispatch' && inputs.release_tag || github.ref_name }}
     steps:
+      - name: Checkout the workflow implementation revision
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with:
+          ref: ${{ github.sha }}
+          path: workflow-source
+          persist-credentials: false
+
       - name: Fetch validated public tag without credentials
         run: git clone --depth 1 --branch "$MIURA_RELEASE_TAG" https://github.com/juanramonvf/miura-panel.git release-source
 
@@ -135,51 +145,10 @@ jobs:
 
       - name: Verify complete draft assets before publishing
         env:
+          GH_REPO: juanramonvf/miura-panel
           GITHUB_REPOSITORY: ${{ github.repository }}
-          GITHUB_TOKEN: ${{ github.token }}
-        run: |
-          python3 - <<'PY'
-          import hashlib, json, os, pathlib, urllib.request
-          repo=os.environ['GITHUB_REPOSITORY']; tag=os.environ['MIURA_RELEASE_TAG']
-          token=os.environ['GITHUB_TOKEN']; root=pathlib.Path('release-assets')
-          version=tag[1:]
-          expected={
-              f'install-spanish-empire-panel-v{version}.sh',
-              f'install-spanish-empire-panel-v{version}.sh.sha256',
-              'miura-panel-update-manifest.json',
-              'miura-panel-update-manifest.json.sha256',
-              'RELEASE_NOTES.md',
-          }
-          base=f'https://api.github.com/repos/{repo}/releases'
-          release=None; page=1
-          while page<=10000:
-              req=urllib.request.Request(f'{base}?per_page=100&page={page}',headers={
-                  'Accept':'application/vnd.github+json','Authorization':'Bearer '+token,
-                  'X-GitHub-Api-Version':'2026-03-10','User-Agent':'miura-panel-release-check'})
-              with urllib.request.urlopen(req,timeout=20) as response:
-                  releases=json.loads(response.read(4*1024*1024).decode())
-              if not isinstance(releases,list): raise SystemExit('Release listing API response is invalid')
-              release=next((item for item in releases if item.get('tag_name')==tag),None)
-              if release is not None or len(releases)<100: break
-              page+=1
-          if page>10000: raise SystemExit('Release listing exceeded pagination safety limit')
-          if release is None: raise SystemExit('Created draft is not visible with GITHUB_TOKEN')
-          if release.get('draft') is not True: raise SystemExit('Expected an unpublished draft release')
-          if f'<!-- miura-release-run:{os.environ["GITHUB_RUN_ID"]} -->' not in release.get('body',''):
-              raise SystemExit('Draft release is not owned by this workflow run')
-          assets=release.get('assets',[])
-          if {asset.get('name') for asset in assets} != expected:
-              raise SystemExit('Draft assets do not exactly match the approved package file set')
-          for asset in assets:
-              path=root/asset['name']
-              if not path.is_file() or asset.get('state')!='uploaded' or asset.get('size')!=path.stat().st_size:
-                  raise SystemExit('Uploaded asset size/state mismatch: '+asset['name'])
-              digest=hashlib.sha256(path.read_bytes()).hexdigest()
-              api_digest=asset.get('digest')
-              if not isinstance(api_digest,str) or api_digest != 'sha256:'+digest:
-                  raise SystemExit('Uploaded asset digest mismatch: '+asset['name'])
-          print('Draft asset names, upload state, sizes, and available API digests verified')
-          PY
+          GH_TOKEN: ${{ github.token }}
+        run: python3 workflow-source/scripts/release/release_draft.py verify
 
       - name: Publish release
         id: publish-release
@@ -189,34 +158,12 @@ jobs:
 
       - name: Remove only this run's unpublished draft after failure
         if: always() && steps.create-draft.outcome != 'skipped' && steps.publish-release.outcome != 'success'
-        continue-on-error: true
         env:
           GH_TOKEN: ${{ github.token }}
+          GH_REPO: juanramonvf/miura-panel
           GITHUB_REPOSITORY: ${{ github.repository }}
-        run: |
-          release_id="$(python3 - <<'PY'
-          import json,os,urllib.request
-          repo=os.environ['GITHUB_REPOSITORY']; tag=os.environ['MIURA_RELEASE_TAG']; token=os.environ['GH_TOKEN']
-          base=f'https://api.github.com/repos/{repo}/releases'; page=1
-          while page<=10000:
-              req=urllib.request.Request(f'{base}?per_page=100&page={page}',headers={
-                  'Accept':'application/vnd.github+json','Authorization':'Bearer '+token,
-                  'X-GitHub-Api-Version':'2026-03-10','User-Agent':'miura-panel-release-cleanup'})
-              with urllib.request.urlopen(req,timeout=20) as response: releases=json.loads(response.read(4*1024*1024).decode())
-              release=next((item for item in releases if item.get('tag_name')==tag),None)
-              if release:
-                  marker=f'<!-- miura-release-run:{os.environ["GITHUB_RUN_ID"]} -->'
-                  if release.get('draft') and marker in release.get('body',''):
-                      print(release['id'])
-                  break
-              if len(releases)<100: break
-              page+=1
-          PY
-          )" || exit 0
-          if [[ -n "$release_id" ]]; then
-            gh api -X DELETE "repos/${GH_REPO}/releases/${release_id}"
-            echo 'Removed only this run-owned draft; the tag was preserved.'
-          fi
+          CREATE_DRAFT_OUTCOME: ${{ steps.create-draft.outcome }}
+        run: python3 workflow-source/scripts/release/release_draft.py cleanup
 
       - name: Verify published release is immutable
         env:
