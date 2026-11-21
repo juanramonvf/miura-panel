@@ -24,6 +24,7 @@ import tempfile
 import time
 import unittest
 import uuid
+import urllib.parse
 from unittest.mock import patch
 
 
@@ -33,6 +34,7 @@ INSTALLER = pathlib.Path(os.environ.get(
     "MIURA_INSTALLER_PATH",
     ROOT / "dist" / f"install-spanish-empire-panel-v{VERSION}.sh",
 )).resolve()
+V1038_INSTALLER = ROOT / "dist" / "install-spanish-empire-panel-v1.0.38.sh"
 ADMIN_UNIT = pathlib.Path("etc/systemd/system/server-dashboard-admin.service")
 ADMIN_ROOT = pathlib.Path("etc/spanish-empire-panel")
 ADMIN_STATE = pathlib.Path("var/lib/spanish-empire-panel-admin")
@@ -101,6 +103,47 @@ class AdminHttpsBootstrapTests(unittest.TestCase):
         pass_patch = patch.object(module.getpass, "getpass", side_effect=[password, password])
         return input_patch, pass_patch, email, password
 
+    @staticmethod
+    def omv7_v1038_admin_unit():
+        return '''[Unit]
+Description=Miura Panel Configuración HTTPS autenticada
+After=network-online.target server-dashboard-web.service
+Wants=network-online.target
+ConditionPathExists=/etc/spanish-empire-panel/admin-enabled
+
+[Service]
+Type=simple
+User=sep-admin
+Group=sep-admin
+SupplementaryGroups=server-dashboard
+WorkingDirectory=/var/www/server-dashboard
+ExecStart=/usr/bin/python3 /usr/local/sbin/sep-admin-web.py
+Restart=on-failure
+RestartSec=3
+UMask=0077
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictSUIDSGID=false
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
+ReadWritePaths=/var/lib/spanish-empire-panel-admin /var/lib/server-dashboard/preferences
+NoNewPrivileges=false
+
+[Install]
+WantedBy=multi-user.target
+'''
+
+    @staticmethod
+    def omv7_v1038_preferences_override():
+        return b'''[Service]
+SupplementaryGroups=server-dashboard-prefs
+SupplementaryGroups=server-dashboard-read
+ReadWritePaths=/var/lib/server-dashboard/preferences
+'''
+
     def launch_https_service(self, prefix: pathlib.Path, module, bind: str, port: int):
         env = os.environ.copy()
         env["MIURA_ROOT_PREFIX"] = str(prefix)
@@ -155,11 +198,13 @@ class AdminHttpsBootstrapTests(unittest.TestCase):
             self.assertIn("Group=sep-admin\n", unit)
             self.assertIn("ExecStart=/usr/bin/python3 /usr/local/sbin/server-dashboard-admin.py\n", unit)
             self.assertIn("ProtectSystem=strict\n", unit)
+            self.assertIn("RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6\n", unit)
             self.assertIn("ProtectHome=true\n", unit)
             self.assertIn("ProtectKernelTunables=true\n", unit)
             self.assertIn("ProtectKernelModules=true\n", unit)
             self.assertIn("ProtectControlGroups=true\n", unit)
             self.assertIn("NoNewPrivileges=true\n", unit)
+            self.assertIn("RestrictSUIDSGID=true\n", unit)
             self.assertIn("UMask=0077\n", unit)
             self.assertIn("SupplementaryGroups=server-dashboard-read server-dashboard-prefs\n", unit)
             self.assertIn("StateDirectory=spanish-empire-panel-admin\n", unit)
@@ -209,6 +254,24 @@ class AdminHttpsBootstrapTests(unittest.TestCase):
                 )
                 self.assertEqual(checked.returncode, 0, checked.stdout + checked.stderr)
 
+    def test_upgrade_from_v1038_preserves_configuration_and_installs_candidate_helpers(self):
+        if not V1038_INSTALLER.is_file():
+            self.skipTest("no está disponible el instalador v1.0.38")
+        with tempfile.TemporaryDirectory(prefix="miura-upgrade-v1038-") as temp:
+            prefix = pathlib.Path(temp) / "root"
+            env = os.environ.copy()
+            env["MIURA_ROOT_PREFIX"] = str(prefix)
+            old = subprocess.run(["bash", str(V1038_INSTALLER), "--normal"], cwd=ROOT,
+                env=env, capture_output=True, text=True, timeout=90, check=False)
+            self.assertEqual(old.returncode, 0, old.stdout + old.stderr)
+            conf = prefix / "etc/server-dashboard.conf"
+            conf.write_text(conf.read_text() + "CUSTOM_KEEP=value\n", encoding="utf-8")
+            self.install(prefix, "--upgrade")
+            self.assertIn("CUSTOM_KEEP=value", conf.read_text())
+            self.assertEqual(json.loads((prefix / "var/www/server-dashboard/version.json").read_text())["version"], "1.0.40")
+            self.assertTrue((prefix / ADMIN_UNIT).is_file())
+            self.assertTrue((prefix / "usr/local/sbin/server-dashboard-admin.py").is_file())
+
     def test_vendor_admin_unit_is_resolved_without_creating_an_etc_override(self):
         with tempfile.TemporaryDirectory(prefix="miura-admin-vendor-unit-") as temp:
             prefix = pathlib.Path(temp) / "root"
@@ -235,6 +298,231 @@ class AdminHttpsBootstrapTests(unittest.TestCase):
                 module.ensure_prerequisites()
             self.assertFalse((prefix / ADMIN_ROOT / "admin.json").exists())
 
+    def test_legacy_systemd_profile_migrates_with_copy_and_rollback(self):
+        with tempfile.TemporaryDirectory(prefix="miura-admin-unit-migration-") as temp:
+            prefix = pathlib.Path(temp) / "root"
+            self.install(prefix, "--normal")
+            module = self.load_setup(prefix)
+            legacy_unit = self.omv7_v1038_admin_unit()
+            vendor = prefix / "usr/lib/systemd/system/server-dashboard-admin.service"
+            vendor.parent.mkdir(parents=True, exist_ok=True)
+            for directory in (prefix / "usr", prefix / "usr/lib", prefix / "usr/lib/systemd", vendor.parent):
+                directory.chmod(0o755)
+            (prefix / ADMIN_UNIT).replace(vendor)
+            vendor.write_text(legacy_unit, encoding="utf-8")
+            vendor.chmod(0o644)
+            override = prefix / "etc/systemd/system/server-dashboard-admin.service.d/miura-preferences.conf"
+            override.parent.mkdir(parents=True)
+            override.parent.chmod(0o750)
+            override.write_bytes(self.omv7_v1038_preferences_override())
+            override.chmod(0o644)
+            (prefix / "lib").symlink_to("usr/lib", target_is_directory=True)
+            vendor_override = prefix / "usr/lib/systemd/system/server-dashboard-admin.service.d/10-legacy.conf"
+            vendor_override.parent.mkdir(parents=True)
+            vendor_override.parent.chmod(0o755)
+            vendor_override.write_bytes(override.read_bytes())
+            vendor_override.chmod(0o644)
+            original_vendor = vendor.read_bytes()
+            original_override = override.read_bytes()
+            original_vendor_override = vendor_override.read_bytes()
+
+            backup = module.migrate_admin_unit()
+            self.assertIsNotNone(backup)
+            self.assertTrue((prefix / ADMIN_UNIT).is_file())
+            self.assertNotIn("ConditionPathExists", (prefix / ADMIN_UNIT).read_text())
+            self.assertFalse(override.exists())
+            self.assertFalse(vendor_override.exists())
+            self.assertTrue((pathlib.Path(backup) / "manifest.json").is_file())
+            module.ensure_prerequisites()
+
+            module.restore_admin_unit_migration(backup)
+            self.assertFalse((prefix / ADMIN_UNIT).exists())
+            self.assertEqual(vendor.read_bytes(), original_vendor)
+            self.assertEqual(override.read_bytes(), original_override)
+            self.assertEqual(vendor_override.read_bytes(), original_vendor_override)
+            self.assertEqual(override.parent.stat().st_mode & 0o777, 0o750)
+
+    def test_legacy_migration_failure_restores_unit_and_miura_override_exactly(self):
+        with tempfile.TemporaryDirectory(prefix="miura-admin-unit-failed-migration-") as temp:
+            prefix = pathlib.Path(temp) / "root"
+            self.install(prefix, "--normal")
+            module = self.load_setup(prefix)
+            unit = prefix / ADMIN_UNIT
+            original_unit = self.omv7_v1038_admin_unit().encode()
+            unit.write_bytes(original_unit)
+            unit.chmod(0o640)
+            dropin = prefix / "etc/systemd/system/server-dashboard-admin.service.d/miura-preferences.conf"
+            dropin.parent.mkdir(parents=True)
+            dropin.parent.chmod(0o755)
+            original_dropin = self.omv7_v1038_preferences_override()
+            dropin.write_bytes(original_dropin)
+            dropin.chmod(0o640)
+            vendor_dropin = prefix / "usr/lib/systemd/system/server-dashboard-admin.service.d/miura-preferences.conf"
+            vendor_dropin.parent.mkdir(parents=True)
+            for directory in (prefix / "usr", prefix / "usr/lib", prefix / "usr/lib/systemd",
+                              prefix / "usr/lib/systemd/system", vendor_dropin.parent):
+                directory.chmod(0o755)
+            original_vendor_dropin = (
+                b"[Service]\nSupplementaryGroups=server-dashboard-prefs\n"
+                b"ReadWritePaths=/var/lib/server-dashboard/preferences\n")
+            vendor_dropin.write_bytes(original_vendor_dropin)
+            vendor_dropin.chmod(0o640)
+            original_unlink = pathlib.Path.unlink
+
+            def fail_dropin_unlink(path, *args, **kwargs):
+                if path == vendor_dropin:
+                    raise OSError("injected failure after canonical unit replacement")
+                return original_unlink(path, *args, **kwargs)
+
+            with patch.object(pathlib.Path, "unlink", fail_dropin_unlink):
+                with self.assertRaisesRegex(OSError, "injected failure"):
+                    module.migrate_admin_unit()
+            self.assertEqual(unit.read_bytes(), original_unit)
+            self.assertEqual(unit.stat().st_mode & 0o777, 0o640)
+            self.assertEqual(dropin.read_bytes(), original_dropin)
+            self.assertEqual(dropin.stat().st_mode & 0o777, 0o640)
+            self.assertEqual(vendor_dropin.read_bytes(), original_vendor_dropin)
+            self.assertEqual(vendor_dropin.stat().st_mode & 0o777, 0o640)
+
+    def test_v1039_unit_and_preferences_override_remain_compatible(self):
+        with tempfile.TemporaryDirectory(prefix="miura-v1039-unit-compatible-") as temp:
+            prefix = pathlib.Path(temp) / "root"
+            self.install(prefix, "--normal")
+            module = self.load_setup(prefix)
+            unit = prefix / ADMIN_UNIT
+            # Literal unit shipped by the v1.0.39 installer, independently
+            # transcribed from that tagged installer.
+            current_unit = module.canonical_admin_unit()
+            v1039_unit = '''[Unit]
+Description=Miura Panel authenticated HTTPS administration
+After=network.target
+
+[Service]
+Type=simple
+User=sep-admin
+Group=sep-admin
+SupplementaryGroups=server-dashboard-read server-dashboard-prefs
+WorkingDirectory=/var/www/server-dashboard
+ExecStartPre=/usr/bin/test -s /etc/spanish-empire-panel/admin.json
+ExecStartPre=/usr/bin/test -s /etc/spanish-empire-panel/admin.crt
+ExecStartPre=/usr/bin/test -s /etc/spanish-empire-panel/admin.key
+ExecStart=/usr/bin/python3 /usr/local/sbin/server-dashboard-admin.py
+Restart=on-failure
+RestartSec=3
+UMask=0077
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+UnsetEnvironment=MIURA_ROOT_PREFIX
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+StateDirectory=spanish-empire-panel-admin
+StateDirectoryMode=0700
+ReadWritePaths=/var/lib/server-dashboard/preferences
+
+[Install]
+WantedBy=multi-user.target
+'''
+            unit.write_text(v1039_unit, encoding="utf-8")
+            unit.chmod(0o644)
+            dropin = prefix / "etc/systemd/system/server-dashboard-admin.service.d/miura-preferences.conf"
+            dropin.parent.mkdir(parents=True)
+            dropin.parent.chmod(0o755)
+            dropin.write_text(
+                "[Service]\nSupplementaryGroups=server-dashboard-prefs\n"
+                "ReadWritePaths=/var/lib/server-dashboard/preferences\n", encoding="utf-8")
+            dropin.chmod(0o644)
+            backup = module.migrate_admin_unit()
+            self.assertIsNotNone(backup)
+            self.assertEqual(unit.read_text(encoding="utf-8"), current_unit)
+            self.assertFalse(dropin.exists())
+            module.ensure_prerequisites()
+
+    def test_upgrade_v1038_omv7_profile_then_first_https_activation(self):
+        if not V1038_INSTALLER.is_file():
+            self.skipTest("no está disponible el instalador v1.0.38")
+        with tempfile.TemporaryDirectory(prefix="miura-v1038-omv7-first-https-") as temp:
+            prefix = pathlib.Path(temp) / "root"
+            env = os.environ.copy()
+            env["MIURA_ROOT_PREFIX"] = str(prefix)
+            old = subprocess.run(["bash", str(V1038_INSTALLER), "--normal"], cwd=ROOT,
+                env=env, capture_output=True, text=True, timeout=90, check=False)
+            self.assertEqual(old.returncode, 0, old.stdout + old.stderr)
+
+            module = self.load_setup(prefix)
+            vendor = prefix / "usr/lib/systemd/system/server-dashboard-admin.service"
+            vendor.parent.mkdir(parents=True, exist_ok=True)
+            for directory in (prefix / "usr", prefix / "usr/lib", prefix / "usr/lib/systemd", vendor.parent):
+                directory.chmod(0o755)
+            vendor.write_text(self.omv7_v1038_admin_unit(), encoding="utf-8")
+            vendor.chmod(0o644)
+            inherited_dropin = prefix / "etc/systemd/system/server-dashboard-admin.service.d/miura-preferences.conf"
+            inherited_dropin.parent.mkdir(parents=True, exist_ok=True)
+            inherited_dropin.parent.chmod(0o755)
+            inherited_dropin.write_bytes(self.omv7_v1038_preferences_override())
+            inherited_dropin.chmod(0o644)
+            old_unit_bytes = vendor.read_bytes()
+
+            self.install(prefix, "--upgrade")
+            self.assertEqual(vendor.read_bytes(), self.omv7_v1038_admin_unit().encode("utf-8"))
+            self.assertEqual(inherited_dropin.read_bytes(), self.omv7_v1038_preferences_override())
+            self.add_minimal_boot_target(prefix)
+            port = self.set_free_port_pair(prefix)
+            input_patch, pass_patch, _email, _password = self.credentials(module)
+            with input_patch, pass_patch:
+                module.main()
+
+            unit = prefix / ADMIN_UNIT
+            self.assertTrue(unit.is_file())
+            normalized = unit.read_text(encoding="utf-8")
+            self.assertEqual(normalized, module.canonical_admin_unit())
+            self.assertIn("ExecStart=/usr/bin/python3 /usr/local/sbin/server-dashboard-admin.py\n", normalized)
+            self.assertIn("SupplementaryGroups=server-dashboard-read server-dashboard-prefs\n", normalized)
+            self.assertIn("NoNewPrivileges=true\n", normalized)
+            self.assertIn("RestrictSUIDSGID=true\n", normalized)
+            self.assertNotIn("ConditionPathExists", normalized)
+            self.assertFalse(inherited_dropin.exists())
+            self.assertEqual(vendor.read_bytes(), old_unit_bytes)
+            self.assertFalse((prefix / ADMIN_ROOT / "admin-enabled").exists())
+
+            service, log = self.launch_https_service(prefix, module, "127.0.0.1", port)
+            try:
+                self.assertIsNone(service.poll(), self.log_contents(log))
+                module.activate_admin("127.0.0.1", port)
+                self.assertFalse((prefix / ADMIN_ROOT / "admin-enabled").exists())
+                module.complete_activation()
+                self.assertTrue((prefix / ADMIN_ROOT / "admin-enabled").is_file())
+            finally:
+                self.stop_service(service, log)
+
+    def test_legacy_unit_unknown_directive_is_never_overwritten(self):
+        with tempfile.TemporaryDirectory(prefix="miura-admin-unit-unknown-") as temp:
+            prefix = pathlib.Path(temp) / "root"
+            self.install(prefix, "--normal")
+            module = self.load_setup(prefix)
+            unit = prefix / ADMIN_UNIT
+            original = self.omv7_v1038_admin_unit().replace(
+                "NoNewPrivileges=false\n", "NoNewPrivileges=false\nEnvironment=UNREVIEWED=1\n")
+            unit.write_text(original, encoding="utf-8")
+            unit.chmod(0o644)
+            with self.assertRaisesRegex(SystemExit, "configuración desconocida"):
+                module.migrate_admin_unit()
+            self.assertEqual(unit.read_text(encoding="utf-8"), original)
+
+            original = self.omv7_v1038_admin_unit().encode("utf-8")
+            unit.write_bytes(original)
+            dropin = prefix / ADMIN_UNIT.parent / (ADMIN_UNIT.name + ".d") / "miura-preferences.conf"
+            dropin.parent.mkdir(mode=0o750)
+            unknown = self.omv7_v1038_preferences_override() + b"Environment=UNREVIEWED=1\n"
+            dropin.write_bytes(unknown)
+            dropin.chmod(0o640)
+            with self.assertRaisesRegex(SystemExit, "Override administrativo desconocido"):
+                module.migrate_admin_unit()
+            self.assertEqual(unit.read_bytes(), original)
+            self.assertEqual(dropin.read_bytes(), unknown)
+
     def test_setup_verifies_live_tls_before_enable_then_real_password_login(self):
         with tempfile.TemporaryDirectory(prefix="miura-admin-bootstrap-login-") as temp:
             prefix = pathlib.Path(temp) / "root"
@@ -242,11 +530,22 @@ class AdminHttpsBootstrapTests(unittest.TestCase):
             self.add_minimal_boot_target(prefix)
             port = self.set_free_port_pair(prefix)
             module = self.load_setup(prefix)
+            unit_path = prefix / ADMIN_UNIT
+            unit_path.write_text(unit_path.read_text().replace(
+                "After=network.target", "After=network.target\nConditionPathExists=/etc/spanish-empire-panel/admin-enabled"
+            ), encoding="utf-8")
+            inherited_dropin = prefix / "etc/systemd/system/server-dashboard-admin.service.d/10-legacy-prefs.conf"
+            inherited_dropin.parent.mkdir(parents=True)
+            inherited_dropin.parent.chmod(0o755)
+            inherited_dropin.write_bytes(self.omv7_v1038_preferences_override())
+            inherited_dropin.chmod(0o644)
             input_patch, pass_patch, email, password = self.credentials(module)
             service = log = None
             try:
                 with input_patch, pass_patch:
                     module.main()
+                self.assertNotIn("ConditionPathExists", unit_path.read_text(encoding="utf-8"))
+                self.assertFalse(inherited_dropin.exists())
                 self.assertTrue((prefix / ADMIN_ROOT / "admin.json").is_file())
                 self.assertTrue((prefix / ADMIN_ROOT / "admin.crt").is_file())
                 self.assertFalse((prefix / ADMIN_ROOT / "admin-enabled").exists())
@@ -260,6 +559,7 @@ class AdminHttpsBootstrapTests(unittest.TestCase):
                 module.complete_activation()
                 self.assertTrue((prefix / ADMIN_ROOT / "admin-enabled").is_file())
                 self.assertTrue((prefix / "var/www/server-dashboard/admin-status.json").is_file())
+                self.assertEqual(module.STATUS.stat().st_mode & 0o777, 0o640)
                 self.assertEqual((prefix / ADMIN_ROOT / "admin.json").stat().st_mode & 0o777, 0o400)
                 self.assertEqual((prefix / ADMIN_ROOT / "admin.crt").stat().st_mode & 0o777, 0o400)
                 self.assertEqual((prefix / ADMIN_ROOT / "admin.key").stat().st_mode & 0o777, 0o400)
@@ -274,7 +574,7 @@ class AdminHttpsBootstrapTests(unittest.TestCase):
                 self.assertIn("Administración HTTPS", response.read().decode("utf-8"))
                 connection.close()
 
-                body = json.dumps({"email": email, "password": password}).encode("utf-8")
+                body = json.dumps({"email": email, "password": password, "next": "/configuracion"}).encode("utf-8")
                 headers = {"Content-Type": "application/json", "Origin": f"https://127.0.0.1:{port}"}
                 bad_body = json.dumps({"email": email, "password": "incorrect-password"}).encode("utf-8")
                 connection = http.client.HTTPSConnection("127.0.0.1", port, context=context, timeout=5)
@@ -292,17 +592,70 @@ class AdminHttpsBootstrapTests(unittest.TestCase):
                 connection = http.client.HTTPSConnection("127.0.0.1", port, context=context, timeout=5)
                 connection.request("POST", "/api/admin/login", body=body, headers=headers)
                 response = connection.getresponse()
-                self.assertEqual(response.status, 200, response.read().decode("utf-8"))
+                login_result = json.loads(response.read().decode("utf-8"))
+                self.assertEqual(response.status, 200)
+                self.assertEqual(login_result["next"], "/configuracion")
                 cookies = response.getheaders()
                 cookie = next(value.split(";", 1)[0] for key, value in cookies if key.lower() == "set-cookie" and value.startswith("sep_adm="))
                 self.assertTrue(any(key.lower() == "set-cookie" and "Secure" in value and "HttpOnly" in value and "SameSite=Strict" in value for key, value in cookies))
                 connection.close()
 
                 connection = http.client.HTTPSConnection("127.0.0.1", port, context=context, timeout=5)
+                connection.request("GET", "/admin-status.json", headers={"Cookie": cookie})
+                response = connection.getresponse()
+                self.assertEqual(response.status, 200)
+                self.assertEqual(json.loads(response.read()), {"enabled": True})
+                connection.close()
+
+                connection = http.client.HTTPSConnection("127.0.0.1", port, context=context, timeout=5)
+                connection.request("POST", "/api/admin/login", body=json.dumps({
+                    "email": email, "password": password, "next": "https://evil.example/"
+                }), headers=headers)
+                response = connection.getresponse()
+                unsafe_redirect_result = json.loads(response.read().decode("utf-8"))
+                self.assertEqual(response.status, 200)
+                self.assertEqual(unsafe_redirect_result["next"], "/")
+                connection.close()
+
+                connection = http.client.HTTPSConnection("127.0.0.1", port, context=context, timeout=5)
                 connection.request("GET", "/admin", headers={"Cookie": cookie})
                 response = connection.getresponse()
                 self.assertEqual(response.status, 200)
-                self.assertIn("Configuración", response.read().decode("utf-8"))
+                admin_html = response.read().decode("utf-8")
+                self.assertIn("Configuración", admin_html)
+                connection.close()
+
+                connection = http.client.HTTPSConnection("127.0.0.1", port, context=context, timeout=5)
+                for protected_path in ("/configuracion", "/admin"):
+                    connection = http.client.HTTPSConnection("127.0.0.1", port, context=context, timeout=5)
+                    connection.request("GET", protected_path)
+                    response = connection.getresponse()
+                    self.assertEqual(response.status, 303)
+                    self.assertEqual(response.getheader("Location"), "/login?next="+urllib.parse.quote(protected_path,safe=''))
+                    response.read()
+                    connection.close()
+
+                dashboard_html = (prefix / "var/www/server-dashboard/index.html").read_text()
+                self.assertIn('id="sepAccountBar"', dashboard_html)
+                self.assertIn('id="sepAccountSettings"', dashboard_html)
+                self.assertIn('id="sepAccountLogout"', dashboard_html)
+                self.assertIn("Sesión: ", dashboard_html)
+
+                connection = http.client.HTTPSConnection("127.0.0.1", port, context=context, timeout=5)
+                connection.request("GET", "/api/admin/state", headers={"Cookie": cookie})
+                response = connection.getresponse()
+                state = json.loads(response.read().decode("utf-8"))
+                self.assertEqual(response.status, 200)
+                connection.close()
+                connection = http.client.HTTPSConnection("127.0.0.1", port, context=context, timeout=5)
+                connection.request("POST", "/api/admin/logout", body="{}", headers={
+                    "Cookie": cookie, "Origin": f"https://127.0.0.1:{port}",
+                    "Content-Type": "application/json", "X-SEP-CSRF": state["csrf"]})
+                response = connection.getresponse()
+                self.assertEqual(response.status, 200)
+                self.assertTrue(any(key.lower() == "set-cookie" and value.startswith("sep_adm=")
+                                    and "Max-Age=0" in value for key, value in response.getheaders()))
+                response.read()
                 connection.close()
 
                 with self.assertRaises(OSError):
@@ -326,6 +679,81 @@ class AdminHttpsBootstrapTests(unittest.TestCase):
             finally:
                 if service is not None:
                     self.stop_service(service, log)
+
+    @unittest.skipUnless(os.geteuid() == 0, "requiere UID 0 para verificar el acceso con dos identidades")
+    def test_admin_status_permissions_on_upgrade_creation_and_restore(self):
+        with tempfile.TemporaryDirectory(prefix="miura-admin-status-") as temp:
+            # All paths remain in the temporary tree, including when the
+            # setup helper runs its privileged file ownership branch.
+            top = pathlib.Path(temp)
+            top.chmod(0o711)
+            prefix = top / "root"
+            self.install(prefix, "--normal")
+            # A real Debian installation already has searchable OS parents.
+            for parent in (prefix, prefix / "var", prefix / "var/www"):
+                parent.chmod(0o755)
+            module = self.load_setup(prefix)
+            web = pwd.getpwnam("www-data")
+            try:
+                admin = pwd.getpwnam("sep-admin")
+            except KeyError:
+                admin = pwd.getpwnam("nobody")
+            try:
+                read_gid = grp.getgrnam("server-dashboard-read").gr_gid
+            except KeyError:
+                read_gid = web.pw_gid  # Same numeric fallback as the isolated installer.
+            enabled = b'{"enabled":true}\n'
+            module.STATUS.write_bytes(enabled)
+            os.chown(module.STATUS, web.pw_uid, web.pw_gid)
+            module.STATUS.chmod(0o400)
+
+            def as_service(account, script, *paths):
+                return subprocess.run(
+                    [sys.executable, "-c", script, *map(str, paths)], cwd=top,
+                    user=account.pw_uid, group=account.pw_gid, extra_groups=[read_gid],
+                    capture_output=True, text=True, check=False,
+                )
+
+            read = "import pathlib, sys; print(pathlib.Path(sys.argv[1]).read_text().strip())"
+            legacy = as_service(admin, read, module.STATUS)
+            self.assertNotEqual(legacy.returncode, 0)
+            self.assertIn("PermissionError", legacy.stderr)
+
+            def check_status():
+                st = module.STATUS.stat()
+                self.assertEqual((st.st_uid, st.st_gid, st.st_mode & 0o777), (0, read_gid, 0o640))
+                for account in (web, admin):
+                    result = as_service(account, read, module.STATUS)
+                    self.assertEqual(result.returncode, 0, result.stderr)
+                    self.assertEqual(json.loads(result.stdout), {"enabled": True})
+                    denied = as_service(account, "import sys; open(sys.argv[1], 'ab')", module.STATUS)
+                    self.assertIn("PermissionError", denied.stderr)
+
+            self.install(prefix, "--upgrade")
+            check_status()
+            module.ROOT.mkdir(mode=0o750, exist_ok=True)
+            module.STATE.mkdir(mode=0o700, exist_ok=True)
+            private = (module.ADMIN, module.KEY, module.ACCOUNT_STATE)
+            for path in private:
+                path.write_bytes(b"private fixture\n")
+                path.chmod(0o600)
+            with patch.object(module, "ROOT_PREFIX", None), patch.object(
+                module, "status_read_gid", return_value=read_gid
+            ):
+                os.chown(module.STATUS, web.pw_uid, web.pw_gid)
+                module.STATUS.chmod(0o400)
+                module.normalize_managed_file_permissions(admin.pw_uid, admin.pw_gid)
+                check_status()
+                module.STATUS.unlink()
+                module.complete_activation()
+                check_status()
+                status_snapshot = module.snapshot(module.STATUS)
+                module.STATUS.unlink()
+                module.restore_snapshot(module.STATUS, status_snapshot)
+                check_status()
+            for path, mode in zip(private, (0o400, 0o400, 0o600)):
+                self.assertEqual(path.stat().st_mode & 0o777, mode)
+                self.assertIn("PermissionError", as_service(web, read, path).stderr)
 
     def test_failed_https_health_check_never_enables_admin(self):
         with tempfile.TemporaryDirectory(prefix="miura-admin-bootstrap-failure-") as temp:
@@ -368,7 +796,8 @@ class AdminHttpsBootstrapTests(unittest.TestCase):
             # probe / cleanup branch. The systemctl runner is a stub, not the
             # host manager; openssl still runs to create a real fixture cert.
             module.ROOT_PREFIX = None
-            module.ensure_prerequisites = lambda: (0, 0)
+            module.ensure_prerequisites = lambda **_kwargs: (0, 0)
+            module.migrate_admin_unit = lambda: None
             calls = []
             real_subprocess = subprocess
 
@@ -387,8 +816,9 @@ class AdminHttpsBootstrapTests(unittest.TestCase):
 
             module.subprocess = IsolatedSubprocess
             original_write = module.atomic_write
-            module.atomic_write = lambda path, data, uid=None, gid=None, read_only=False: original_write(
-                path, data, None, None, read_only
+            module.status_read_gid = os.getgid
+            module.atomic_write = lambda path, data, uid=None, gid=None, read_only=False, **options: original_write(
+                path, data, None, None, read_only, **options
             )
             module.check_https_ready = lambda *_args, **_kwargs: (_ for _ in ()).throw(
                 RuntimeError("TLS health check failed")
@@ -657,7 +1087,8 @@ class AdminHttpsBootstrapTests(unittest.TestCase):
                       module.ADMIN_UNIT, module.ACCOUNT_STATE)
             self.assertTrue(all(path.is_relative_to(prefix) for path in pinned))
             module.ROOT_PREFIX = None
-            module.ensure_prerequisites = lambda: (0, 0)
+            module.ensure_prerequisites = lambda **_kwargs: (0, 0)
+            module.migrate_admin_unit = lambda: None
             calls = []
             restoring = {"started": False}
             real_subprocess = subprocess
@@ -690,8 +1121,9 @@ class AdminHttpsBootstrapTests(unittest.TestCase):
 
             module.subprocess = IsolatedSubprocess
             real_atomic_write = module.atomic_write
-            module.atomic_write = lambda path, data, uid=None, gid=None, read_only=False: real_atomic_write(
-                path, data, None, None, read_only
+            module.status_read_gid = os.getgid
+            module.atomic_write = lambda path, data, uid=None, gid=None, read_only=False, **options: real_atomic_write(
+                path, data, None, None, read_only, **options
             )
             real_run = module.run
 

@@ -29,11 +29,123 @@ SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)"
 PAYLOAD_TMP=''
 BACKUP=''
 INSTALL_STARTED=0
+ROOT_PREFIX_DB_SNAPSHOT=''
+ROOT_PREFIX_DB_MUTATED=0
 CONF_CREATED=0
 CONF_MODIFIED=0
 OLD_WEB=''
 OLD_HOLDER=''
-cleanup_payload() { [[ -z "$PAYLOAD_TMP" ]] || rm -rf "$PAYLOAD_TMP"; }
+snapshot_root_prefix_accounts() {
+  [[ -n "$ROOT_PREFIX" ]] || return 0
+  ROOT_PREFIX_DB_SNAPSHOT="$(mktemp -d -t miura-root-prefix-accounts.XXXXXX)" ||
+    fail 'No se pudo crear la copia privada de las cuentas del root prefix'
+  chmod 0700 "$ROOT_PREFIX_DB_SNAPSHOT"
+  python3 - "$ROOT_PREFIX" "$ROOT_PREFIX_DB_SNAPSHOT" <<'PY'
+import json,os,pathlib,stat,sys
+root=pathlib.Path(sys.argv[1]).resolve(strict=True); backup=pathlib.Path(sys.argv[2])
+etc=root/'etc'; metadata={'etc':None,'files':{}}
+try:
+ st=etc.lstat()
+ if not stat.S_ISDIR(st.st_mode): raise SystemExit('etc del root prefix no es un directorio seguro')
+ metadata['etc']={'uid':st.st_uid,'gid':st.st_gid,'mode':stat.S_IMODE(st.st_mode)}
+except FileNotFoundError: pass
+if metadata['etc'] is not None:
+ for name in ('passwd','group'):
+  path=etc/name
+  try: st=path.lstat()
+  except FileNotFoundError:
+   metadata['files'][name]=None; continue
+  if not stat.S_ISREG(st.st_mode) or st.st_nlink!=1:
+   raise SystemExit(f'etc/{name} del root prefix no es regular y exclusivo')
+  fd=os.open(path,os.O_RDONLY|os.O_NOFOLLOW|os.O_CLOEXEC)
+  try:
+   opened=os.fstat(fd)
+   if (opened.st_dev,opened.st_ino)!=(st.st_dev,st.st_ino):
+    raise SystemExit(f'etc/{name} cambió durante la copia previa')
+   chunks=[]
+   while True:
+    block=os.read(fd,65536)
+    if not block:break
+    chunks.append(block)
+  finally:os.close(fd)
+  target=backup/name
+  with target.open('xb') as output:
+   output.write(b''.join(chunks));output.flush();os.fsync(output.fileno())
+  target.chmod(0o600)
+  metadata['files'][name]={'uid':st.st_uid,'gid':st.st_gid,'mode':stat.S_IMODE(st.st_mode)}
+(backup/'manifest.json').write_text(json.dumps(metadata)+'\n',encoding='utf-8')
+(backup/'manifest.json').chmod(0o600)
+PY
+}
+
+restore_root_prefix_accounts() {
+  [[ -n "$ROOT_PREFIX_DB_SNAPSHOT" && -d "$ROOT_PREFIX_DB_SNAPSHOT" ]] || return 0
+  python3 - "$ROOT_PREFIX" "$ROOT_PREFIX_DB_SNAPSHOT" <<'PY'
+import json,os,pathlib,stat,sys,tempfile
+root=pathlib.Path(sys.argv[1]).resolve(strict=True); backup=pathlib.Path(sys.argv[2])
+manifest=backup/'manifest.json'
+if manifest.is_symlink() or not manifest.is_file(): raise SystemExit('Copia de cuentas del root prefix inválida')
+data=json.loads(manifest.read_text(encoding='utf-8')); etc=root/'etc'
+if etc.is_symlink() or (etc.exists() and not etc.is_dir()): raise SystemExit('Rollback de cuentas rechazado: etc inseguro')
+if data['etc'] is not None: etc.mkdir(mode=0o755,exist_ok=True)
+for name in ('passwd','group'):
+ meta=data['files'].get(name); path=etc/name
+ if meta is None:
+  try: st=path.lstat()
+  except FileNotFoundError: continue
+  if not stat.S_ISREG(st.st_mode) or st.st_nlink!=1: raise SystemExit(f'Rollback de cuentas rechazado: etc/{name} cambió a archivo inseguro')
+  path.unlink(); continue
+ source=backup/name
+ if source.is_symlink() or not source.is_file() or source.stat().st_nlink!=1:
+  raise SystemExit(f'Copia de etc/{name} inválida')
+ if path.is_symlink() or (path.exists() and (not path.is_file() or path.stat().st_nlink!=1)):
+  raise SystemExit(f'Rollback de cuentas rechazado: etc/{name} inseguro')
+ fd,tmp=tempfile.mkstemp(prefix=f'.{name}.restore-',dir=etc)
+ try:
+  os.fchown(fd,meta['uid'],meta['gid']);os.fchmod(fd,meta['mode'])
+  with source.open('rb') as incoming:
+   while True:
+    block=incoming.read(65536)
+    if not block:break
+    view=memoryview(block)
+    while view:view=view[os.write(fd,view):]
+  os.fsync(fd);os.close(fd);fd=-1
+  os.replace(tmp,path)
+ finally:
+  if fd>=0:os.close(fd)
+  try:os.unlink(tmp)
+  except FileNotFoundError:pass
+if data['etc'] is not None:
+ st=data['etc']; os.chown(etc,st['uid'],st['gid']);os.chmod(etc,st['mode'])
+else:
+ try:etc.rmdir()
+ except OSError:pass
+PY
+}
+
+discard_root_prefix_account_snapshot() {
+  [[ -z "$ROOT_PREFIX_DB_SNAPSHOT" || ! -d "$ROOT_PREFIX_DB_SNAPSHOT" ]] || rm -rf "$ROOT_PREFIX_DB_SNAPSHOT"
+  ROOT_PREFIX_DB_SNAPSHOT=''
+}
+
+finish_root_prefix_account_transaction() {
+  local status="$1"
+  if ((status != 0 && ROOT_PREFIX_DB_MUTATED)); then
+    if ! restore_root_prefix_accounts; then
+      printf 'ERROR: no se pudo restaurar etc/passwd y etc/group del root prefix; copia privada: %s\n' "$ROOT_PREFIX_DB_SNAPSHOT" >&2
+      return 1
+    fi
+  fi
+  discard_root_prefix_account_snapshot
+}
+
+cleanup_payload() {
+  local status=$?
+  trap - EXIT
+  finish_root_prefix_account_transaction "$status"
+  [[ -z "$PAYLOAD_TMP" ]] || rm -rf "$PAYLOAD_TMP"
+  return "$status"
+}
 trap cleanup_payload EXIT
 
 # A built installer carries its complete source payload after this script.
@@ -120,6 +232,7 @@ if [[ -n "$ROOT_PREFIX" ]]; then
   ROOT_PREFIX="$(cd -- "$ROOT_PREFIX" && pwd -P)"
   [[ "$ROOT_PREFIX" != / ]] || fail 'MIURA_ROOT_PREFIX no puede ser /; usa una raíz temporal independiente'
   command -v python3 >/dev/null || fail 'La prueba aislada necesita python3 en el sistema que ejecuta el instalador'
+  snapshot_root_prefix_accounts
 else
   [[ -x /usr/bin/python3 ]] || fail 'No se encuentra /usr/bin/python3; instala Python 3 antes de continuar'
   /usr/bin/python3 -c 'import psutil' >/dev/null 2>&1 || fail 'Falta psutil para Python 3. Instala el paquete del sistema python3-psutil y vuelve a ejecutar el instalador'
@@ -252,6 +365,7 @@ for rel in \
 done
 ADMIN_UNIT_PRESENT=0
 ADMIN_UNIT_MANAGED=0
+REMOVE_LEGACY_ADMIN_GROUP=0
 if [[ -n "$ROOT_PREFIX" ]]; then
   for candidate in \
     "$(root_path "$ADMIN_UNIT_REL")" \
@@ -338,8 +452,14 @@ if [[ -z "$ROOT_PREFIX" ]]; then
   [[ "$ADMIN_SHELL" == /usr/sbin/nologin || "$ADMIN_SHELL" == /bin/false ]] ||
     fail "La cuenta $ADMIN_USER debe tener una shell no interactiva"
   ADMIN_USER_GROUPS="$(id -Gn "$ADMIN_USER")" || fail "No se pudieron comprobar los grupos de $ADMIN_USER"
-  [[ "$ADMIN_USER_GROUPS" == "$ADMIN_GROUP" ]] ||
-    fail "La cuenta $ADMIN_USER pertenece a grupos adicionales; revísala antes de instalar"
+  read -r -a ADMIN_GROUPS <<< "$ADMIN_USER_GROUPS"
+  for membership in "${ADMIN_GROUPS[@]}"; do
+    case "$membership" in
+      "$ADMIN_GROUP") ;;
+      server-dashboard) REMOVE_LEGACY_ADMIN_GROUP=1 ;;
+      *) fail "La cuenta $ADMIN_USER pertenece al grupo adicional no reconocido $membership; revísala antes de instalar" ;;
+    esac
+  done
 else
   # Isolated root-prefix runs do not create host groups. Reuse www-data's
   # numeric gid solely inside the fixture so effective traversal can be tested.
@@ -352,7 +472,8 @@ else
   if [[ -n "$ROOT_PREFIX" ]]; then
     ADMIN_GID="${ADMIN_GID:-29994}"
     ADMIN_UID="${ADMIN_UID:-29994}"
-    python3 - "$ROOT_PREFIX" "$ADMIN_UID" "$ADMIN_GID" "$ADMIN_USER" "$ADMIN_GROUP" "$ADMIN_STATE_REL" <<'PY'
+    ROOT_PREFIX_DB_MUTATED=1
+    ROOT_PREFIX_GROUP_MIGRATION="$(python3 - "$ROOT_PREFIX" "$ADMIN_UID" "$ADMIN_GID" "$ADMIN_USER" "$ADMIN_GROUP" "$ADMIN_STATE_REL" <<'PY'
 import os, pathlib, stat, sys
 uid=int(sys.argv[2]); gid=int(sys.argv[3])
 user,group,home=sys.argv[4:]
@@ -446,6 +567,7 @@ try:
 
     group_rows=[line.split(':') for line in group_lines if line.split(':',1)[0]==group]
     group_changed=False
+    legacy_member_present=False
     if group_rows:
         if (len(group_rows)!=1 or len(group_rows[0])<4 or not group_rows[0][2].isdigit() or
                 int(group_rows[0][2])!=gid or group_rows[0][3]):
@@ -455,6 +577,20 @@ try:
             fail('GID de sep-admin duplicado en el root prefix')
         group_lines.append(f'{group}:x:{gid}:')
         group_changed=True
+
+    # Detect the inherited membership during preflight, but defer changing it
+    # until the installer backup and failure trap are active.
+    legacy_rows=[(index,line.split(':')) for index,line in enumerate(group_lines)
+                 if line.split(':',1)[0]=='server-dashboard']
+    if len(legacy_rows)>1:
+        fail('El grupo server-dashboard está duplicado en el root prefix')
+    if legacy_rows:
+        index,row=legacy_rows[0]
+        if len(row)<4 or not row[2].isdigit():
+            fail('El grupo server-dashboard es inválido en el root prefix')
+        members=[value for value in row[3].split(',') if value]
+        if user in members:
+            legacy_member_present=True
 
     def write_database(name, expected, lines):
         flags=os.O_WRONLY|no_follow|getattr(os,'O_CLOEXEC',0)
@@ -483,10 +619,16 @@ try:
     # safe opens, and account/group consistency validation.
     if passwd_changed: write_database('passwd',passwd_stat,passwd_lines)
     if group_changed: write_database('group',group_stat,group_lines)
+    if legacy_member_present: print('legacy-member-present')
 finally:
     if etc_fd is not None: os.close(etc_fd)
     os.close(root_fd)
 PY
+    )" || fail 'No se pudo validar o migrar la pertenencia de grupo del root prefix'
+    [[ "$ROOT_PREFIX_GROUP_MIGRATION" != legacy-member-present ]] || REMOVE_LEGACY_ADMIN_GROUP=1
+    if [[ "${MIURA_TEST_FAIL_AFTER_ACCOUNT_DB:-0}" == 1 ]]; then
+      fail 'Fallo de prueba después de provisionar las cuentas aisladas'
+    fi
   fi
 fi
 prepare_web_parent() {
@@ -704,6 +846,44 @@ with tempfile.TemporaryDirectory(prefix='miura-rollback-') as temp_name:
         lines[service_index + 1:service_index + 1] = [f'{key}={value}' for key, value in required.items()]
         unit.write_text('\n'.join(lines) + '\n', encoding='utf-8')
 PY
+  if [[ -n "$ROOT_PREFIX" && -f "$ROLLBACK/restore-server-dashboard-group-membership" ]]; then
+    python3 - "$ROOT_PREFIX" "$ADMIN_USER" <<'PY'
+import os,pathlib,stat,sys,tempfile
+root=pathlib.Path(sys.argv[1]); user=sys.argv[2]; path=root/'etc/group'
+st=path.lstat()
+if not stat.S_ISREG(st.st_mode) or st.st_nlink!=1: raise SystemExit('Rollback de grupo rechazado: etc/group no es regular')
+fd=os.open(path,os.O_RDONLY|os.O_NOFOLLOW|os.O_CLOEXEC)
+try:
+ opened=os.fstat(fd)
+ if (opened.st_dev,opened.st_ino)!=(st.st_dev,st.st_ino): raise SystemExit('Rollback de grupo rechazado: etc/group cambió')
+ with os.fdopen(fd,'r',encoding='utf-8',closefd=False) as stream: lines=stream.read().splitlines()
+finally: os.close(fd)
+rows=[i for i,line in enumerate(lines) if line.split(':',1)[0]=='server-dashboard']
+if len(rows)!=1: raise SystemExit('Rollback de grupo rechazado: grupo server-dashboard ambiguo')
+i=rows[0]; row=lines[i].split(':')
+if len(row)<4 or not row[2].isdigit(): raise SystemExit('Rollback de grupo rechazado: entrada inválida')
+members=[x for x in row[3].split(',') if x]
+if user not in members: members.append(user)
+row[3]=','.join(members); lines[i]=':'.join(row)
+fd,tmp=tempfile.mkstemp(prefix='.group-restore-',dir=path.parent)
+try:
+ os.fchown(fd,st.st_uid,st.st_gid); os.fchmod(fd,stat.S_IMODE(st.st_mode))
+ data=('\n'.join(lines)+'\n').encode(); offset=0
+ while offset<len(data): offset+=os.write(fd,data[offset:])
+ os.fsync(fd); os.close(fd); fd=-1
+ current=path.lstat()
+ if (current.st_dev,current.st_ino)!=(st.st_dev,st.st_ino): raise SystemExit('Rollback de grupo rechazado: etc/group cambió antes de restaurar')
+ os.replace(tmp,path)
+ dfd=os.open(path.parent,os.O_RDONLY|os.O_DIRECTORY); os.fsync(dfd); os.close(dfd)
+finally:
+ if fd>=0: os.close(fd)
+ try: os.unlink(tmp)
+ except FileNotFoundError: pass
+PY
+  fi
+  if [[ -z "$ROOT_PREFIX" && -f "$ROLLBACK/restore-server-dashboard-group-membership" ]]; then
+    gpasswd -a "$ADMIN_USER" server-dashboard >/dev/null || fail "No se pudo restaurar la pertenencia heredada de $ADMIN_USER a server-dashboard"
+  fi
   if [[ -z "$ROOT_PREFIX" ]] && command -v systemctl >/dev/null; then
     systemctl daemon-reload
     systemctl restart server-dashboard-web.service
@@ -865,6 +1045,10 @@ tar "${TAR_ARGS[@]}" 2>/dev/null || {
 if [[ -n "$LEGACY_ADMIN_ALIAS_SNAPSHOT" ]]; then
   rm -f -- "$LEGACY_ADMIN_ALIAS_SNAPSHOT"
 fi
+if ((REMOVE_LEGACY_ADMIN_GROUP)) && [[ -n "$ROOT_PREFIX" ]]; then
+  printf 'sep-admin\n' > "$BACKUP/restore-server-dashboard-group-membership"
+  chmod 0600 "$BACKUP/restore-server-dashboard-group-membership"
+fi
 if [[ -f "$CONF" ]]; then
   cp -p "$CONF" "$BACKUP/server-dashboard.conf"
   chmod 0600 "$BACKUP/server-dashboard.conf"
@@ -919,9 +1103,57 @@ cleanup() {
   [[ -z "$OLD_HOLDER" || ! -e "$OLD_HOLDER" ]] || rm -rf "$OLD_HOLDER"
   rm -rf "$STAGE"
   [[ -z "$PAYLOAD_TMP" ]] || rm -rf "$PAYLOAD_TMP"
+  finish_root_prefix_account_transaction "$status"
   return "$status"
 }
 trap cleanup EXIT
+if ((REMOVE_LEGACY_ADMIN_GROUP)); then
+  if [[ -z "$ROOT_PREFIX" ]]; then
+    getent group server-dashboard >/dev/null || fail 'La cuenta sep-admin declara server-dashboard pero ese grupo no existe'
+    printf 'sep-admin\n' > "$BACKUP/restore-server-dashboard-group-membership"
+    chmod 0600 "$BACKUP/restore-server-dashboard-group-membership"
+    gpasswd -d "$ADMIN_USER" server-dashboard >/dev/null || fail "No se pudo retirar únicamente la pertenencia heredada de $ADMIN_USER a server-dashboard"
+    ADMIN_USER_GROUPS="$(id -Gn "$ADMIN_USER")" || fail "No se pudieron verificar los grupos de $ADMIN_USER tras la migración"
+    [[ "$ADMIN_USER_GROUPS" == "$ADMIN_GROUP" ]] || fail "La migración de grupos produjo una pertenencia inesperada para $ADMIN_USER"
+  else
+    python3 - "$ROOT_PREFIX" "$ADMIN_USER" <<'PY'
+import os,pathlib,stat,sys,tempfile
+root=pathlib.Path(sys.argv[1]).resolve(strict=True); user=sys.argv[2]; path=root/'etc/group'
+st=path.lstat()
+if not stat.S_ISREG(st.st_mode) or st.st_nlink!=1: raise SystemExit('Migración de grupo rechazada: etc/group no es regular')
+fd=os.open(path,os.O_RDONLY|os.O_NOFOLLOW|os.O_CLOEXEC)
+try:
+ opened=os.fstat(fd)
+ if (opened.st_dev,opened.st_ino)!=(st.st_dev,st.st_ino): raise SystemExit('Migración de grupo rechazada: etc/group cambió')
+ with os.fdopen(fd,'r',encoding='utf-8',closefd=False) as source: lines=source.read().splitlines()
+finally: os.close(fd)
+rows=[i for i,line in enumerate(lines) if line.split(':',1)[0]=='server-dashboard']
+if len(rows)!=1: raise SystemExit('Migración de grupo rechazada: grupo server-dashboard ambiguo')
+i=rows[0]; row=lines[i].split(':')
+if len(row)<4 or not row[2].isdigit(): raise SystemExit('Migración de grupo rechazada: entrada inválida')
+members=[name for name in row[3].split(',') if name]
+if user not in members: raise SystemExit('Migración de grupo rechazada: no existe la pertenencia que se iba a retirar')
+row[3]=','.join(name for name in members if name!=user); lines[i]=':'.join(row)
+fd,tmp=tempfile.mkstemp(prefix='.group-miura-',dir=path.parent)
+try:
+ os.fchown(fd,st.st_uid,st.st_gid); os.fchmod(fd,stat.S_IMODE(st.st_mode))
+ data=('\n'.join(lines)+'\n').encode(); offset=0
+ while offset<len(data): offset+=os.write(fd,data[offset:])
+ os.fsync(fd); os.close(fd); fd=-1
+ current=path.lstat()
+ if (current.st_dev,current.st_ino)!=(st.st_dev,st.st_ino): raise SystemExit('Migración de grupo rechazada: etc/group cambió antes de publicar')
+ os.replace(tmp,path)
+ dfd=os.open(path.parent,os.O_RDONLY|os.O_DIRECTORY); os.fsync(dfd); os.close(dfd)
+finally:
+ if fd>=0: os.close(fd)
+ try: os.unlink(tmp)
+ except FileNotFoundError: pass
+PY
+  fi
+fi
+if [[ "${MIURA_TEST_FAIL_AFTER_ROLLBACK_TRAP:-0}" == 1 ]]; then
+  fail 'Fallo de prueba después de activar el rollback'
+fi
 for file in "${FILES[@]}"; do
   if [[ "$file" == sep-logo.png ]]; then
     mkdir -m 0755 "$STAGE/assets"
@@ -931,9 +1163,12 @@ for file in "${FILES[@]}"; do
   fi
 done
 if [[ "$MODE" == normal ]]; then
-  for file in data.json history.json docker-updates.json panel-update.json fleet-role.json admin-status.json; do
+  for file in data.json history.json docker-updates.json panel-update.json fleet-role.json; do
     [[ -f "$WEB/$file" && ! -L "$WEB/$file" ]] && cp -a "$WEB/$file" "$STAGE/$file"
   done
+  if [[ -f "$WEB/admin-status.json" && ! -L "$WEB/admin-status.json" ]]; then
+    install -m 0640 "$WEB/admin-status.json" "$STAGE/admin-status.json"
+  fi
 fi
 # Publish the complete web tree as one directory swap.
 OLD_HOLDER="$(mktemp -d "$WEB_PARENT/.server-dashboard.swap-$STAMP.XXXXXX")"
@@ -1106,9 +1341,11 @@ Restart=on-failure
 RestartSec=3
 UMask=0077
 NoNewPrivileges=true
+RestrictSUIDSGID=true
 PrivateTmp=true
 ProtectSystem=strict
 ProtectHome=true
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
 UnsetEnvironment=MIURA_ROOT_PREFIX
 ProtectKernelTunables=true
 ProtectKernelModules=true

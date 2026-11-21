@@ -81,6 +81,42 @@ vm.runInNewContext(SCRIPT, context);
 
 
 class FrontendRefreshTests(unittest.TestCase):
+    def test_https_session_indicator_uses_readable_admin_status(self):
+        html = (ROOT / "index.html").read_text(encoding="utf-8")
+        start = html.index("fetch('admin-status.json?")
+        end = html.index("fetch('fleet-role.json?", start)
+        harness = r"""
+const assert = require('node:assert/strict');
+const vm = require('node:vm');
+const link = { hidden: true };
+const requests = [];
+const context = {
+  $: selector => { assert.equal(selector, '#sepAdminLink'); return link; },
+  location: { protocol: 'https:', hostname: 'panel.example.test', port: '8767' },
+  fetch: async url => {
+    requests.push(url);
+    const data = url.startsWith('admin-status.json?') ? { enabled: true }
+      : { authenticated: true, account: 'owner@example.test' };
+    return { ok: true, json: async () => data };
+  },
+  document: { body: { classList: { remove() {} } } },
+  sepAuthenticated: false,
+  sepRenderServers() {},
+  checkPanelVersion() {},
+};
+vm.runInNewContext(process.argv[1], context);
+setImmediate(() => {
+  assert.ok(requests[0].startsWith('admin-status.json?'));
+  assert.equal(requests[1], '/api/admin/status');
+  assert.equal(link.hidden, false);
+  assert.equal(link.textContent, '👤 Sesión: owner@example.test');
+  assert.equal(link.href, 'https://panel.example.test:8767/configuracion');
+  assert.equal(context.sepAuthenticated, true);
+});
+"""
+        subprocess.run(["node", "-e", harness, html[start:end]], cwd=ROOT, check=True,
+                       capture_output=True, text=True, timeout=5)
+
     def test_script_extractor_handles_case_and_attributes(self):
         html = '<SCRIPT type="text/javascript">const installedAtLoad=\'x\';</SCRIPT>'
         self.assertIn("const installedAtLoad=", reload_script(html))

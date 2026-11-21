@@ -1,0 +1,5 @@
+{
+  "version": "1.0.40",
+  "installer": "https://raw.githubusercontent.com/juanramonvf/miura-panel/development/v1.0.40-candidate/dist/install-spanish-empire-panel-v1.0.40.sh",
+  "sha256": "adaaf2d1884e20d2221d882a22061eeb91a7e343e79fe7e18f68f1bb45ee4c98"
+}

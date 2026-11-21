@@ -40,10 +40,17 @@ KEY=ROOT/'admin.key'
 SERVICE='server-dashboard-admin.service'
 WEB=rooted('/var/www/server-dashboard')
 STATUS=WEB/'admin-status.json'
+STATUS_MODE=0o640
 ADMIN_UNIT=rooted('/etc/systemd/system/server-dashboard-admin.service')
 ADMIN_UNIT_FALLBACKS=(
     rooted('/usr/lib/systemd/system/server-dashboard-admin.service'),
     rooted('/lib/systemd/system/server-dashboard-admin.service'),
+)
+ADMIN_DROPIN_DIRS=(
+    rooted('/etc/systemd/system/server-dashboard-admin.service.d'),
+    rooted('/run/systemd/system/server-dashboard-admin.service.d'),
+    rooted('/usr/lib/systemd/system/server-dashboard-admin.service.d'),
+    rooted('/lib/systemd/system/server-dashboard-admin.service.d'),
 )
 ACCOUNT_STATE=STATE/'account.json'
 
@@ -75,9 +82,11 @@ def validate_admin_unit(path):
         'RestartSec=3',
         'UMask=0077',
         'NoNewPrivileges=true',
+        'RestrictSUIDSGID=true',
         'PrivateTmp=true',
         'ProtectSystem=strict',
         'ProtectHome=true',
+        'RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6',
         'UnsetEnvironment=MIURA_ROOT_PREFIX',
         'ProtectKernelTunables=true',
         'ProtectKernelModules=true',
@@ -98,18 +107,295 @@ def validate_admin_unit(path):
             service_lines.append(line.strip())
     if service_sections!=1 or service_lines!=expected_service_lines:
         die('La unidad administrativa existente no coincide exactamente con el perfil seguro requerido; no se activarán credenciales')
-    unit_name='server-dashboard-admin.service.d'
-    for directory in (
-        rooted('/etc/systemd/system')/unit_name,
-        rooted('/run/systemd/system')/unit_name,
-        rooted('/usr/lib/systemd/system')/unit_name,
-        rooted('/lib/systemd/system')/unit_name,
-    ):
+    for directory in ADMIN_DROPIN_DIRS:
         if directory.is_symlink():
             die(f'No se permite un directorio de overrides administrativo enlazado: {directory}')
         if directory.exists():
             if not directory.is_dir() or any(directory.iterdir()):
                 die(f'No se permiten overrides de la unidad administrativa: {directory}')
+
+
+def canonical_admin_unit():
+    return '''[Unit]
+Description=Miura Panel authenticated HTTPS administration
+After=network.target
+
+[Service]
+Type=simple
+User=sep-admin
+Group=sep-admin
+SupplementaryGroups=server-dashboard-read server-dashboard-prefs
+WorkingDirectory=/var/www/server-dashboard
+ExecStartPre=/usr/bin/test -s /etc/spanish-empire-panel/admin.json
+ExecStartPre=/usr/bin/test -s /etc/spanish-empire-panel/admin.crt
+ExecStartPre=/usr/bin/test -s /etc/spanish-empire-panel/admin.key
+ExecStart=/usr/bin/python3 /usr/local/sbin/server-dashboard-admin.py
+Restart=on-failure
+RestartSec=3
+UMask=0077
+NoNewPrivileges=true
+RestrictSUIDSGID=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+UnsetEnvironment=MIURA_ROOT_PREFIX
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+StateDirectory=spanish-empire-panel-admin
+StateDirectoryMode=0700
+ReadWritePaths=/var/lib/server-dashboard/preferences
+
+[Install]
+WantedBy=multi-user.target
+'''
+
+
+# Full unit observed on OMV7 v1.0.38. Match it as a whole before replacing it.
+OMV7_V1038_ADMIN_UNIT = '''[Unit]
+Description=Miura Panel Configuración HTTPS autenticada
+After=network-online.target server-dashboard-web.service
+Wants=network-online.target
+ConditionPathExists=/etc/spanish-empire-panel/admin-enabled
+
+[Service]
+Type=simple
+User=sep-admin
+Group=sep-admin
+SupplementaryGroups=server-dashboard
+WorkingDirectory=/var/www/server-dashboard
+ExecStart=/usr/bin/python3 /usr/local/sbin/sep-admin-web.py
+Restart=on-failure
+RestartSec=3
+UMask=0077
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictSUIDSGID=false
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
+ReadWritePaths=/var/lib/spanish-empire-panel-admin /var/lib/server-dashboard/preferences
+NoNewPrivileges=false
+
+[Install]
+WantedBy=multi-user.target
+'''
+
+
+def normalize_recognized_legacy_unit(text):
+    """Return the current unit only for complete recognized profiles."""
+    canonical=canonical_admin_unit()
+    if text==canonical:
+        return canonical
+    # Exact v1.0.39 unit (before the additional SUID/SGID restriction) and
+    # the exact marker-gated bootstrap variant shipped in early candidates.
+    # These are complete-string matches, so no other omitted/extra setting is
+    # accepted through this compatibility path.
+    v1039=canonical.replace('RestrictSUIDSGID=true\n','').replace(
+        'RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6\n','')
+    bootstrap_variants={
+        canonical.replace('After=network.target\n',
+            'After=network.target\nConditionPathExists=/etc/spanish-empire-panel/admin-enabled\n'),
+        v1039,
+        v1039.replace('After=network.target\n',
+            'After=network.target\nConditionPathExists=/etc/spanish-empire-panel/admin-enabled\n'),
+    }
+    if text in bootstrap_variants:
+        return canonical
+
+    return canonical if text==OMV7_V1038_ADMIN_UNIT else None
+
+
+def known_legacy_dropin(text):
+    section=None
+    directives=[]
+    for raw in text.splitlines():
+        line=raw.strip()
+        if not line or line.startswith('#'):continue
+        if line.startswith('[') and line.endswith(']'):
+            section=line[1:-1]
+            if section not in ('Service','Unit'):return False
+            continue
+        if section is None or '=' not in line:return False
+        key,value=line.split('=',1)
+        directives.append((section,key.strip(),value.strip()))
+    if not directives:return False
+    unit=[(k,v) for s,k,v in directives if s=='Unit']
+    service=[(k,v) for s,k,v in directives if s=='Service']
+    if unit and unit != [('ConditionPathExists','/etc/spanish-empire-panel/admin-enabled')]:return False
+    allowed_service={
+        ('SupplementaryGroups','server-dashboard-prefs'),
+        ('SupplementaryGroups','server-dashboard-read'),
+        ('ExecStartPre','/usr/bin/test -f /etc/spanish-empire-panel/admin-enabled'),
+        ('ReadWritePaths','/var/lib/server-dashboard/preferences'),
+    }
+    if any((k,v) not in allowed_service for k,v in service):return False
+    groups=[v for k,v in service if k=='SupplementaryGroups']
+    writes=[v for k,v in service if k=='ReadWritePaths']
+    prechecks=[v for k,v in service if k=='ExecStartPre']
+    if len(set(groups))!=len(groups) or len(writes)>1:return False
+    if len(prechecks)>1:return False
+    if writes and writes!=['/var/lib/server-dashboard/preferences']:return False
+    return bool(unit or groups or writes or prechecks)
+
+
+def validate_systemd_directory(directory, expected_uid):
+    boundary=ROOT_PREFIX if ROOT_PREFIX else Path('/')
+    try:relative=Path(directory).relative_to(boundary)
+    except ValueError:die(f'La ruta de systemd sale de la raíz permitida: {directory}')
+    current=boundary
+    for component in relative.parts:
+        candidate=current/component
+        try:st=candidate.lstat()
+        except OSError:die(f'Falta un directorio systemd seguro: {candidate}')
+        if stat.S_ISLNK(st.st_mode):
+            # Debian may expose the legacy /lib hierarchy as /lib -> usr/lib.
+            if (candidate==boundary/'lib' and os.readlink(candidate) in ('usr/lib','/usr/lib')
+                    and candidate.resolve(strict=True)==boundary/'usr/lib'):
+                current=boundary/'usr/lib'
+                continue
+            die(f'No se permite un enlace en la ruta systemd: {candidate}')
+        if not stat.S_ISDIR(st.st_mode) or st.st_uid!=expected_uid or st.st_mode&0o022:
+            die(f'La ruta de systemd no es segura: {candidate}')
+        current=candidate
+
+
+def migrate_admin_unit():
+    """Back up and normalize recognized legacy unit fragments; fail closed otherwise."""
+    unit=find_admin_unit()
+    if unit is None:
+        die('Falta server-dashboard-admin.service; reinstala Miura Panel')
+    try:
+        st=unit.lstat()
+        if not stat.S_ISREG(st.st_mode) or st.st_nlink!=1:
+            die('La unidad administrativa existente no es un archivo regular seguro')
+        expected_uid=os.geteuid() if ROOT_PREFIX else 0
+        validate_systemd_directory(unit.parent,expected_uid)
+        validate_systemd_directory(ADMIN_UNIT.parent,expected_uid)
+        for directory in ADMIN_DROPIN_DIRS:
+            if directory.is_symlink():die(f'Override administrativo inseguro: {directory}')
+            if directory.exists():
+                if not directory.is_dir():
+                    die(f'Override administrativo inseguro: {directory}')
+                validate_systemd_directory(directory,expected_uid)
+        fd=os.open(unit,os.O_RDONLY|os.O_NOFOLLOW|os.O_CLOEXEC)
+        try:
+            opened=os.fstat(fd)
+            if (not stat.S_ISREG(opened.st_mode) or opened.st_nlink!=1 or
+                    (opened.st_dev,opened.st_ino)!=(st.st_dev,st.st_ino)):
+                die('La unidad administrativa cambió durante la validación')
+            with os.fdopen(fd,'r',encoding='utf-8',closefd=False) as source:text=source.read()
+        finally:os.close(fd)
+        if text==canonical_admin_unit() and not any(
+                directory.exists() and any(directory.iterdir()) for directory in ADMIN_DROPIN_DIRS):
+            return None
+        if st.st_uid!=expected_uid or st.st_mode&0o022:
+            die('La unidad administrativa existente no es un archivo regular seguro')
+    except (OSError,UnicodeError):
+        die('No se pudo leer server-dashboard-admin.service de forma segura')
+    if normalize_recognized_legacy_unit(text) is None:
+        die('La unidad administrativa contiene configuración desconocida; no se sobrescribirá')
+    if unit!=ADMIN_UNIT and (ADMIN_UNIT.exists() or ADMIN_UNIT.is_symlink()):
+        die('Ya existe un override administrativo en /etc; no se sobrescribirá')
+
+    recognized=[]
+    seen_dropins=set()
+    for directory in ADMIN_DROPIN_DIRS:
+        if directory.is_symlink():die(f'Override administrativo inseguro: {directory}')
+        if not directory.exists():
+            continue
+        if not directory.is_dir():
+            die(f'Override administrativo inseguro: {directory}')
+        for path in sorted(directory.iterdir()):
+            pst=path.stat(follow_symlinks=False) if not path.is_symlink() else None
+            if path.is_symlink() or not path.is_file() or pst.st_uid!=expected_uid or pst.st_nlink!=1 or pst.st_mode&0o022:
+                die(f'Override administrativo inseguro: {path} (owner={pst.st_uid if pst else "symlink"}, esperado={expected_uid}, mode={oct(stat.S_IMODE(pst.st_mode)) if pst else "n/a"})')
+            resolved=path.resolve(strict=True)
+            if resolved in seen_dropins:continue
+            seen_dropins.add(resolved)
+            try:
+                fd=os.open(path,os.O_RDONLY|os.O_NOFOLLOW|os.O_CLOEXEC)
+                with os.fdopen(fd,'r',encoding='utf-8') as source: body=source.read().strip().splitlines()
+            except (OSError,UnicodeError): die(f'No se pudo validar el override: {path}')
+            if not known_legacy_dropin('\n'.join(body)):
+                die(f'Override administrativo desconocido; no se sobrescribirá: {path}')
+            recognized.append(path)
+    if text==canonical_admin_unit() and not recognized:
+        return None
+
+    # The service owns STATE. Keep rollback data under the setup directory,
+    # which the service can read but cannot modify.
+    validate_systemd_directory(ROOT.parent,expected_uid)
+    ROOT.mkdir(mode=0o750,exist_ok=True)
+    validate_systemd_directory(ROOT,expected_uid)
+    backup_root=ROOT/'unit-migrations'
+    backup_root.mkdir(mode=0o700,exist_ok=True)
+    validate_systemd_directory(backup_root,expected_uid)
+    stamp=time.strftime('%Y%m%dT%H%M%S',time.gmtime())+'-'+secrets.token_hex(4)
+    backup=backup_root/stamp
+    backup.mkdir(mode=0o700)
+    paths=[unit,*recognized]
+    metadata=[]
+    for path in paths:
+        original=path.stat()
+        relative=path.relative_to(ROOT_PREFIX) if ROOT_PREFIX and path.is_relative_to(ROOT_PREFIX) else Path(str(path).lstrip('/'))
+        target=backup/('files'/relative)
+        target.parent.mkdir(mode=0o700,parents=True,exist_ok=True)
+        shutil.copyfile(path,target,follow_symlinks=False)
+        target.chmod(0o600)
+        metadata.append({
+            'path':str(path),'backup':str(target),'present':True,
+            'mode':stat.S_IMODE(original.st_mode),'uid':original.st_uid,'gid':original.st_gid,
+            'atime_ns':original.st_atime_ns,'mtime_ns':original.st_mtime_ns,
+        })
+    if ADMIN_UNIT not in paths:
+        metadata.append({'path':str(ADMIN_UNIT),'present':False})
+    atomic_write(backup/'manifest.json',(json.dumps(metadata)+'\n').encode())
+    try:
+        atomic_write(ADMIN_UNIT,canonical_admin_unit().encode())
+        for path in recognized:path.unlink()
+        # Retain empty directories so rollback preserves their metadata.
+        if not ROOT_PREFIX:
+            run('/usr/bin/systemctl','daemon-reload')
+    except BaseException:
+        try:restore_admin_unit_migration(backup)
+        except (OSError,SystemExit):
+            print('ERROR: rollback de la unidad incompleto; copia en '+str(backup),file=sys.stderr)
+        raise
+    return backup
+
+
+def restore_admin_unit_migration(backup):
+    if not backup:return
+    try:items=json.loads((Path(backup)/'manifest.json').read_text(encoding='utf-8'))
+    except (OSError,ValueError):die('No se puede validar la copia de la unidad para rollback')
+    # Validate every destination before restoring any file.
+    for item in items:
+        dest=Path(item['path'])
+        src=Path(item['backup']) if item.get('present') else None
+        if (src is not None and (not src.is_file() or src.is_symlink())) or dest.is_symlink():
+            die('Rollback rechazado: copia o destino de unidad inseguro')
+    for item in items:
+        dest=Path(item['path'])
+        if not item.get('present'):
+            if dest.exists():dest.unlink()
+            continue
+        src=Path(item['backup'])
+        dest.parent.mkdir(parents=True,exist_ok=True)
+        tmp=dest.with_name(dest.name+'.restore-'+secrets.token_hex(4))
+        shutil.copyfile(src,tmp)
+        if 'uid' in item and 'gid' in item:
+            temporary=tmp.stat()
+            if (temporary.st_uid,temporary.st_gid)!=(item['uid'],item['gid']):
+                os.chown(tmp,item['uid'],item['gid'])
+        tmp.chmod(int(item['mode']))
+        if 'atime_ns' in item and 'mtime_ns' in item:
+            os.utime(tmp,ns=(item['atime_ns'],item['mtime_ns']))
+        os.replace(tmp,dest)
+    if not ROOT_PREFIX:run('/usr/bin/systemctl','daemon-reload')
 
 
 def find_admin_unit():
@@ -121,12 +407,12 @@ def find_admin_unit():
     return None
 
 
-def ensure_prerequisites():
+def ensure_prerequisites(skip_unit=False):
     unit_path=find_admin_unit()
     if ROOT_PREFIX:
-        if unit_path is None:
+        if unit_path is None and not skip_unit:
             die('Falta la unidad administrativa en la raíz aislada; instala primero Miura Panel')
-        validate_admin_unit(unit_path)
+        if unit_path is not None and not skip_unit:validate_admin_unit(unit_path)
         try:
             admin_group=grp.getgrnam('sep-admin')
             account=__import__('pwd').getpwnam('sep-admin')
@@ -136,17 +422,18 @@ def ensure_prerequisites():
     try:
         admin_group=grp.getgrnam('sep-admin')
     except KeyError:
-        die('Falta el grupo de servicio sep-admin. Reinstala Miura Panel v1.0.39 para provisionarlo')
+        die('Falta el grupo de servicio sep-admin. Reinstala Miura Panel v1.0.40 para provisionarlo')
     try:
         account=__import__('pwd').getpwnam('sep-admin')
     except KeyError:
-        die('Falta la cuenta de servicio sep-admin. Reinstala Miura Panel v1.0.39 para provisionarla')
+        die('Falta la cuenta de servicio sep-admin. Reinstala Miura Panel v1.0.40 para provisionarla')
     if account.pw_gid != admin_group.gr_gid or account.pw_shell not in ('/usr/sbin/nologin','/bin/false'):
         die('La cuenta sep-admin no tiene la configuración dedicada esperada; revisa el sistema')
     if admin_group.gr_mem:
         die('El grupo sep-admin tiene miembros adicionales; revisa el sistema antes de activar HTTPS')
-    if unit_path is None:
-        die('Falta server-dashboard-admin.service; reinstala Miura Panel v1.0.39')
+    if unit_path is None and not skip_unit:
+        die('Falta server-dashboard-admin.service; reinstala Miura Panel v1.0.40')
+    if skip_unit:return admin_group.gr_gid,account.pw_uid
     st=unit_path.stat()
     if st.st_uid!=0 or st.st_mode&0o022:
         die('server-dashboard-admin.service debe pertenecer a root y no permitir escritura a grupo u otros')
@@ -201,13 +488,10 @@ def activate_admin(bind,port):
 def complete_activation(gid=None):
     can_chown=(os.getuid()==0 and not ROOT_PREFIX)
     if can_chown:
-        web_account=__import__('pwd').getpwnam('www-data')
         atomic_write(MARK,b'enabled\n',0,0,read_only=True)
-        atomic_write(STATUS,b'{"enabled":true}\n',web_account.pw_uid,web_account.pw_gid,
-                     read_only=True)
     else:
         atomic_write(MARK,b'enabled\n',read_only=True)
-        atomic_write(STATUS,b'{"enabled":true}\n',read_only=True)
+    write_admin_status(b'{"enabled":true}\n')
 
 
 def current_service_state():
@@ -236,7 +520,7 @@ def restore_service_state(was_active,was_enabled):
                    stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL,check=False)
 
 
-def atomic_write(path,data,uid=None,gid=None,read_only=False):
+def atomic_write(path,data,uid=None,gid=None,read_only=False,*,mode=None):
     path=Path(path)
     path.parent.mkdir(parents=True,exist_ok=True)
     tmp=path.with_name(path.name+'.pending-'+secrets.token_hex(5))
@@ -246,13 +530,26 @@ def atomic_write(path,data,uid=None,gid=None,read_only=False):
             out.write(data);out.flush()
             if uid is not None and gid is not None:
                 os.fchown(out.fileno(),uid,gid)
-            if read_only:os.fchmod(out.fileno(),0o400)
-            else:os.fchmod(out.fileno(),0o600)
+            os.fchmod(out.fileno(),mode if mode is not None else (0o400 if read_only else 0o600))
             os.fsync(out.fileno())
         os.replace(tmp,path)
     finally:
         try:tmp.unlink()
         except FileNotFoundError:pass
+
+
+def status_read_gid():
+    try:
+        return grp.getgrnam('server-dashboard-read').gr_gid
+    except KeyError:
+        die('Falta el grupo server-dashboard-read. Reinstala Miura Panel para provisionarlo')
+
+
+def write_admin_status(data):
+    if ROOT_PREFIX or os.getuid()!=0:
+        atomic_write(STATUS,data,mode=STATUS_MODE)
+    else:
+        atomic_write(STATUS,data,0,status_read_gid(),mode=STATUS_MODE)
 
 
 def ensure_managed_file_paths():
@@ -271,18 +568,17 @@ def ensure_managed_file_paths():
 def normalize_managed_file_permissions(uid,gid):
     if ROOT_PREFIX or os.getuid()!=0:
         return
-    web_account=pwd.getpwnam('www-data')
     policies=(
-        (ADMIN,uid,gid,True),(CERT,uid,gid,True),(KEY,uid,gid,True),
-        (ACCOUNT_STATE,uid,gid,False),(MARK,0,0,True),
-        (STATUS,web_account.pw_uid,web_account.pw_gid,True),
+        (ADMIN,uid,gid,0o400),(CERT,uid,gid,0o400),(KEY,uid,gid,0o400),
+        (ACCOUNT_STATE,uid,gid,0o600),(MARK,0,0,0o400),
+        (STATUS,0,status_read_gid(),STATUS_MODE),
     )
     opened=[]
     try:
         # Validate and snapshot every descriptor before changing any metadata.
         # NONBLOCK prevents an attacker-controlled FIFO replacement from
         # hanging this privileged setup path; NOFOLLOW rejects symlinks.
-        for path,file_uid,file_gid,read_only in policies:
+        for path,file_uid,file_gid,mode in policies:
             try:
                 fd=os.open(path,os.O_RDONLY|os.O_NOFOLLOW|os.O_NONBLOCK|os.O_CLOEXEC)
             except FileNotFoundError:
@@ -291,14 +587,14 @@ def normalize_managed_file_permissions(uid,gid):
             if not stat.S_ISREG(st.st_mode) or st.st_nlink!=1:
                 os.close(fd)
                 die(f'Archivo administrativo inseguro; no se cambiarán sus permisos: {path}')
-            opened.append((fd,st,file_uid,file_gid,read_only))
-        for fd,st,file_uid,file_gid,read_only in opened:
+            opened.append((fd,st,file_uid,file_gid,mode))
+        for fd,st,file_uid,file_gid,mode in opened:
             os.fchown(fd,file_uid,file_gid)
-            os.fchmod(fd,0o400 if read_only else 0o600)
+            os.fchmod(fd,mode)
     except BaseException:
         # If normalization fails partway through, restore original ownership
         # and mode through the already-validated open descriptors.
-        for fd,st,_file_uid,_file_gid,_read_only in reversed(opened):
+        for fd,st,_file_uid,_file_gid,_mode in reversed(opened):
             try:
                 os.fchown(fd,st.st_uid,st.st_gid)
                 os.fchmod(fd,stat.S_IMODE(st.st_mode))
@@ -306,7 +602,7 @@ def normalize_managed_file_permissions(uid,gid):
                 pass
         raise
     finally:
-        for fd,_st,_file_uid,_file_gid,_read_only in opened:
+        for fd,_st,_file_uid,_file_gid,_mode in opened:
             os.close(fd)
 
 
@@ -431,8 +727,8 @@ def restore_snapshot(path,value,gid=None,uid=None):
         owner_uid,owner_gid=uid,gid
         read_only=path!=ACCOUNT_STATE
     elif path==STATUS:
-        account=pwd.getpwnam('www-data')
-        owner_uid,owner_gid=account.pw_uid,account.pw_gid
+        write_admin_status(data)
+        return
     else:
         owner_uid,owner_gid=0,0
     atomic_write(path,data,owner_uid if can_chown else None,
@@ -444,7 +740,6 @@ def main():
     if CONF.is_symlink() or not CONF.is_file():die('Instala Miura Panel antes de activar administración')
     if not shutil.which('openssl'):die('Falta openssl, necesario para TLS')
     if not ROOT_PREFIX and not shutil.which('systemctl'):die('Falta systemctl; se requiere systemd')
-    gid,uid=ensure_prerequisites()
     cfg=config()
     mode=cfg.get('DASHBOARD_MODE','normal').strip().lower()
     if mode!='normal':
@@ -456,6 +751,7 @@ def main():
     if bind!='0.0.0.0':
         try:ipaddress.IPv4Address(bind)
         except ValueError:die('DASHBOARD_BIND_IP debe ser una IPv4 o 0.0.0.0')
+    gid,uid=ensure_prerequisites(skip_unit=True)
     for directory in (ROOT,STATE,WEB):
         if directory.is_symlink() or (directory.exists() and not directory.is_dir()):
             die(f'Ruta administrativa insegura: {directory}')
@@ -479,7 +775,10 @@ def main():
     was_marked=MARK.exists()
     was_active,was_enabled=current_service_state()
     change_credentials = not ADMIN.is_file() or yes('¿Cambiar correo o contraseña? (N conserva las actuales)')
+    migration_backup=None
     try:
+        migration_backup=migrate_admin_unit()
+        gid,uid=ensure_prerequisites()
         if not change_credentials:
             auth=json.loads(ADMIN.read_text())
         else:
@@ -540,6 +839,10 @@ def main():
         for path,value in before.items():
             try:restore_snapshot(path,value,gid,uid)
             except OSError:pass
+        if migration_backup:
+            try:restore_admin_unit_migration(migration_backup)
+            except (OSError,SystemExit):
+                print('ERROR: no se pudo restaurar automáticamente la unidad heredada; copia en '+str(migration_backup),file=sys.stderr)
         restore_service_state(was_active,was_enabled)
         if was_marked and not ROOT_PREFIX:
             subprocess.run(['/usr/bin/systemctl','restart','server-dashboard-web.service'],
