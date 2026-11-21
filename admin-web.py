@@ -24,6 +24,7 @@ import ssl
 import subprocess
 import sys
 import threading
+import urllib.parse
 import time
 from http.server import ThreadingHTTPServer
 from urllib.parse import urlsplit
@@ -118,6 +119,12 @@ def valid_email(value):
             or '..' in value or '\n' in value or '\r' in value):
         raise ValueError('Dirección de correo electrónico no válida')
     return value
+
+
+def safe_login_destination(value):
+    """Return one of the application's local destinations; never accept URLs."""
+    allowed={'/','/configuracion','/admin','/docker-ssh'}
+    return value if isinstance(value,str) and value in allowed else '/'
 
 
 def private_json(path, obj):
@@ -352,7 +359,7 @@ class Handler(live.Handler):
             return self.send_json(200,{'ok':True,'authenticated':bool(s),'account':current_account()['email'] if s else '', 'smtp_enabled':SMTP.is_file()})
         if path in ('/configuracion','/admin','/docker-ssh'):
             if not s:
-                login_target='/login?next=%2Fdocker-ssh' if path=='/docker-ssh' else '/login'
+                login_target='/login?next='+urllib.parse.quote(path,safe='')
                 self.send_response(303);self.send_header('Location',login_target)
                 self.send_header('Content-Length','0');self.end_headers();return
             return self._file('admin.html','text/html; charset=utf-8')
@@ -483,7 +490,8 @@ class Handler(live.Handler):
                 SS.pop(key,None)
                 token=secrets.token_urlsafe(40)
                 sessions[token]={'csrf':secrets.token_urlsafe(32),'until':time.time()+session_hours()*3600}
-            body=b'{"ok":true}'
+            destination=safe_login_destination(data.get('next','/'))
+            body=json.dumps({'ok':True,'next':destination},separators=(',',':')).encode()
             self.send_response(200)
             self.send_header('Set-Cookie',f'sep_adm={token}; Secure; HttpOnly; SameSite=Strict; Path=/; Max-Age={session_hours()*3600}')
             self.send_header('Set-Cookie','sep_guest=; Secure; HttpOnly; SameSite=Strict; Path=/; Max-Age=0')
