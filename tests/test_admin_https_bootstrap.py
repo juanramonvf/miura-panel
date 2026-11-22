@@ -103,6 +103,90 @@ class AdminHttpsBootstrapTests(unittest.TestCase):
         pass_patch = patch.object(module.getpass, "getpass", side_effect=[password, password])
         return input_patch, pass_patch, email, password
 
+    def cleanup_transient_unit(self, unit_name):
+        def load_state():
+            status = subprocess.run(
+                ["systemctl", "show", "--property=LoadState", "--value", unit_name],
+                capture_output=True, text=True, timeout=5, check=False,
+            )
+            self.assertEqual(status.returncode, 0, status.stdout + status.stderr)
+            return status.stdout.strip()
+
+        if load_state() == "not-found":
+            return
+        stopped = subprocess.run(
+            ["systemctl", "stop", unit_name], capture_output=True, text=True,
+            timeout=15, check=False,
+        )
+        self.assertEqual(stopped.returncode, 0, stopped.stdout + stopped.stderr)
+        reset = subprocess.run(
+            ["systemctl", "reset-failed", unit_name], capture_output=True, text=True,
+            timeout=15, check=False,
+        )
+        self.assertEqual(reset.returncode, 0, reset.stdout + reset.stderr)
+        deadline = time.monotonic() + 10
+        while time.monotonic() < deadline:
+            state = load_state()
+            if state == "not-found":
+                return
+            time.sleep(0.1)
+        self.fail(f"La unidad temporal {unit_name} sigue cargada: {state}")
+
+    def start_transient_unit(self, command, unit_name, timeout=20):
+        started = subprocess.run(
+            command, capture_output=True, text=True, timeout=timeout, check=False,
+        )
+        self.assertEqual(started.returncode, 0, started.stdout + started.stderr)
+        return started
+
+    def test_transient_https_unit_cleanup_on_startup_failure(self):
+        for outcome in ("success", "nonzero", "timeout"):
+            with self.subTest(outcome=outcome):
+                unit_name = f"miura-admin-start-failure-{uuid.uuid4().hex[:12]}.service"
+                unit_loaded = False
+                calls = []
+
+                def run(command, **kwargs):
+                    nonlocal unit_loaded
+                    calls.append(tuple(command))
+                    if command[0] == "systemd-run":
+                        unit_loaded = True
+                        if outcome == "timeout":
+                            raise subprocess.TimeoutExpired(command, kwargs.get("timeout"))
+                        if outcome == "nonzero":
+                            return subprocess.CompletedProcess(command, 1, "", "injected startup failure")
+                        return subprocess.CompletedProcess(command, 0, "", "")
+                    if command[:3] == ["systemctl", "show", "--property=LoadState"]:
+                        state = "loaded" if unit_loaded else "not-found"
+                        return subprocess.CompletedProcess(command, 0, state + "\n", "")
+                    if command[:2] == ["systemctl", "stop"]:
+                        unit_loaded = False
+                    return subprocess.CompletedProcess(command, 0, "", "")
+
+                with patch("tests.test_admin_https_bootstrap.subprocess.run", side_effect=run):
+                    try:
+                        if outcome == "timeout":
+                            with self.assertRaises(subprocess.TimeoutExpired):
+                                self.start_transient_unit(["systemd-run", f"--unit={unit_name}"], unit_name)
+                        elif outcome == "nonzero":
+                            with self.assertRaisesRegex(AssertionError, "injected startup failure"):
+                                self.start_transient_unit(["systemd-run", f"--unit={unit_name}"], unit_name)
+                        else:
+                            started = self.start_transient_unit(
+                                ["systemd-run", f"--unit={unit_name}"], unit_name)
+                            self.assertEqual(started.returncode, 0)
+                    finally:
+                        self.cleanup_transient_unit(unit_name)
+
+                self.assertFalse(unit_loaded)
+                self.assertIn(("systemctl", "stop", unit_name), calls)
+                self.assertIn(("systemctl", "reset-failed", unit_name), calls)
+                self.assertEqual(calls.count(("systemctl", "stop", unit_name)), 1)
+                self.assertEqual(calls.count(("systemctl", "reset-failed", unit_name)), 1)
+                self.assertEqual(calls[-1], (
+                    "systemctl", "show", "--property=LoadState", "--value", unit_name,
+                ))
+
     @staticmethod
     def omv7_v1038_admin_unit():
         return '''[Unit]
@@ -926,17 +1010,21 @@ WantedBy=multi-user.target
                 "  assert exc.errno in (errno.EROFS,errno.EACCES), exc\n"
                 "else: raise SystemExit('ProtectSystem=strict allowed an unlisted write')"
             )
-            run = subprocess.run(
-                ["systemd-run", "--quiet", "--wait", "--pipe", "--collect",
-                 f"--unit=miura-admin-audit-{uuid.uuid4().hex[:12]}",
-                 f"--property=User={sep_admin.pw_uid}", f"--property=Group={sep_admin.pw_gid}",
-                 f"--property=SupplementaryGroups={read_gid}", "--property=NoNewPrivileges=true",
-                 "--property=ProtectSystem=strict", "--property=ProtectHome=true",
-                 f"--property=ReadWritePaths={preferences} {state}",
-                 "/usr/bin/python3", "-c", python,
-                 *map(str, paths_to_read), str(preferences), str(forbidden)],
-                capture_output=True, text=True, timeout=30, check=False,
-            )
+            audit_unit = f"miura-admin-audit-{uuid.uuid4().hex[:12]}.service"
+            try:
+                run = subprocess.run(
+                    ["systemd-run", "--quiet", "--wait", "--pipe", "--collect",
+                     f"--unit={audit_unit}",
+                     f"--property=User={sep_admin.pw_uid}", f"--property=Group={sep_admin.pw_gid}",
+                     f"--property=SupplementaryGroups={read_gid}", "--property=NoNewPrivileges=true",
+                     "--property=ProtectSystem=strict", "--property=ProtectHome=true",
+                     f"--property=ReadWritePaths={preferences} {state}",
+                     "/usr/bin/python3", "-c", python,
+                     *map(str, paths_to_read), str(preferences), str(forbidden)],
+                    capture_output=True, text=True, timeout=30, check=False,
+                )
+            finally:
+                self.cleanup_transient_unit(audit_unit)
             self.assertEqual(run.returncode, 0, run.stdout + run.stderr)
             self.assertEqual((preferences / "ui.json").read_text(encoding="utf-8"), "saved")
             self.assertFalse(forbidden.exists())
@@ -947,7 +1035,7 @@ WantedBy=multi-user.target
             module.complete_activation()
             unit_name = f"miura-admin-https-{uuid.uuid4().hex[:12]}.service"
             service_command = [
-                "systemd-run", "--quiet", f"--unit={unit_name}",
+                "systemd-run", "--quiet", "--collect", f"--unit={unit_name}",
                 f"--property=User={sep_admin.pw_uid}",
                 f"--property=Group={sep_admin.pw_gid}",
                 f"--property=SupplementaryGroups={read_gid}",
@@ -959,12 +1047,10 @@ WantedBy=multi-user.target
                 f"--property=Environment=MIURA_ROOT_PREFIX={prefix}",
                 "/usr/bin/python3", str(prefix / "usr/local/sbin/server-dashboard-admin.py"),
             ]
-            started = subprocess.run(
-                service_command, capture_output=True, text=True, timeout=20, check=False,
-            )
-            self.assertEqual(started.returncode, 0, started.stdout + started.stderr)
-            context = ssl._create_unverified_context()
             try:
+                started = self.start_transient_unit(service_command, unit_name)
+                self.assertEqual(started.returncode, 0, started.stdout + started.stderr)
+                context = ssl._create_unverified_context()
                 response = None
                 for _ in range(40):
                     try:
@@ -1018,8 +1104,7 @@ WantedBy=multi-user.target
                 response.read()
                 connection.close()
             finally:
-                subprocess.run(["systemctl", "stop", unit_name], capture_output=True,
-                               text=True, timeout=15, check=False)
+                self.cleanup_transient_unit(unit_name)
 
     def test_admin_json_and_private_key_symlinks_are_rejected_without_touching_targets(self):
         with tempfile.TemporaryDirectory(prefix="miura-admin-symlink-guard-") as temp:
