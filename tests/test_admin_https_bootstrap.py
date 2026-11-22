@@ -186,7 +186,7 @@ class AdminHttpsBootstrapTests(unittest.TestCase):
                             unit_failed = False
                         return subprocess.CompletedProcess(command, 0, "", "")
 
-                    with patch("tests.test_admin_https_bootstrap.subprocess.run", side_effect=run):
+                    with patch.object(subprocess, "run", side_effect=run):
                         try:
                             if outcome == "timeout":
                                 with self.assertRaises(subprocess.TimeoutExpired):
