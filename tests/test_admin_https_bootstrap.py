@@ -112,6 +112,14 @@ class AdminHttpsBootstrapTests(unittest.TestCase):
             self.assertEqual(status.returncode, 0, status.stdout + status.stderr)
             return status.stdout.strip()
 
+        def active_state():
+            status = subprocess.run(
+                ["systemctl", "show", "--property=ActiveState", "--value", unit_name],
+                capture_output=True, text=True, timeout=5, check=False,
+            )
+            self.assertEqual(status.returncode, 0, status.stdout + status.stderr)
+            return status.stdout.strip()
+
         if load_state() == "not-found":
             return
         stopped = subprocess.run(
@@ -119,16 +127,20 @@ class AdminHttpsBootstrapTests(unittest.TestCase):
             timeout=15, check=False,
         )
         self.assertEqual(stopped.returncode, 0, stopped.stdout + stopped.stderr)
-        reset = subprocess.run(
-            ["systemctl", "reset-failed", unit_name], capture_output=True, text=True,
-            timeout=15, check=False,
-        )
-        self.assertEqual(reset.returncode, 0, reset.stdout + reset.stderr)
+        state = load_state()
+        if state == "not-found":
+            return
         deadline = time.monotonic() + 10
         while time.monotonic() < deadline:
             state = load_state()
             if state == "not-found":
                 return
+            if active_state() == "failed":
+                reset = subprocess.run(
+                    ["systemctl", "reset-failed", unit_name], capture_output=True, text=True,
+                    timeout=15, check=False,
+                )
+                self.assertEqual(reset.returncode, 0, reset.stdout + reset.stderr)
             time.sleep(0.1)
         self.fail(f"La unidad temporal {unit_name} sigue cargada: {state}")
 
@@ -141,51 +153,61 @@ class AdminHttpsBootstrapTests(unittest.TestCase):
 
     def test_transient_https_unit_cleanup_on_startup_failure(self):
         for outcome in ("success", "nonzero", "timeout"):
-            with self.subTest(outcome=outcome):
-                unit_name = f"miura-admin-start-failure-{uuid.uuid4().hex[:12]}.service"
-                unit_loaded = False
-                calls = []
+            for stop_behavior in ("collects", "failed"):
+                with self.subTest(outcome=outcome, stop_behavior=stop_behavior):
+                    unit_name = f"miura-admin-start-failure-{uuid.uuid4().hex[:12]}.service"
+                    unit_loaded = False
+                    unit_failed = False
+                    calls = []
 
-                def run(command, **kwargs):
-                    nonlocal unit_loaded
-                    calls.append(tuple(command))
-                    if command[0] == "systemd-run":
-                        unit_loaded = True
-                        if outcome == "timeout":
-                            raise subprocess.TimeoutExpired(command, kwargs.get("timeout"))
-                        if outcome == "nonzero":
-                            return subprocess.CompletedProcess(command, 1, "", "injected startup failure")
+                    def run(command, **kwargs):
+                        nonlocal unit_loaded, unit_failed
+                        calls.append(tuple(command))
+                        if command[0] == "systemd-run":
+                            unit_loaded = True
+                            if outcome == "timeout":
+                                raise subprocess.TimeoutExpired(command, kwargs.get("timeout"))
+                            if outcome == "nonzero":
+                                return subprocess.CompletedProcess(command, 1, "", "injected startup failure")
+                            return subprocess.CompletedProcess(command, 0, "", "")
+                        if command[:3] == ["systemctl", "show", "--property=LoadState"]:
+                            state = "loaded" if unit_loaded else "not-found"
+                            return subprocess.CompletedProcess(command, 0, state + "\n", "")
+                        if command[:3] == ["systemctl", "show", "--property=ActiveState"]:
+                            state = "failed" if unit_failed else "inactive"
+                            return subprocess.CompletedProcess(command, 0, state + "\n", "")
+                        if command[:2] == ["systemctl", "stop"]:
+                            if stop_behavior == "collects":
+                                unit_loaded = False
+                            else:
+                                unit_failed = True
+                        if command[:2] == ["systemctl", "reset-failed"]:
+                            unit_loaded = False
+                            unit_failed = False
                         return subprocess.CompletedProcess(command, 0, "", "")
-                    if command[:3] == ["systemctl", "show", "--property=LoadState"]:
-                        state = "loaded" if unit_loaded else "not-found"
-                        return subprocess.CompletedProcess(command, 0, state + "\n", "")
-                    if command[:2] == ["systemctl", "stop"]:
-                        unit_loaded = False
-                    return subprocess.CompletedProcess(command, 0, "", "")
 
-                with patch("tests.test_admin_https_bootstrap.subprocess.run", side_effect=run):
-                    try:
-                        if outcome == "timeout":
-                            with self.assertRaises(subprocess.TimeoutExpired):
-                                self.start_transient_unit(["systemd-run", f"--unit={unit_name}"], unit_name)
-                        elif outcome == "nonzero":
-                            with self.assertRaisesRegex(AssertionError, "injected startup failure"):
-                                self.start_transient_unit(["systemd-run", f"--unit={unit_name}"], unit_name)
-                        else:
-                            started = self.start_transient_unit(
-                                ["systemd-run", f"--unit={unit_name}"], unit_name)
-                            self.assertEqual(started.returncode, 0)
-                    finally:
-                        self.cleanup_transient_unit(unit_name)
+                    with patch("tests.test_admin_https_bootstrap.subprocess.run", side_effect=run):
+                        try:
+                            if outcome == "timeout":
+                                with self.assertRaises(subprocess.TimeoutExpired):
+                                    self.start_transient_unit(["systemd-run", f"--unit={unit_name}"], unit_name)
+                            elif outcome == "nonzero":
+                                with self.assertRaisesRegex(AssertionError, "injected startup failure"):
+                                    self.start_transient_unit(["systemd-run", f"--unit={unit_name}"], unit_name)
+                            else:
+                                started = self.start_transient_unit(
+                                    ["systemd-run", f"--unit={unit_name}"], unit_name)
+                                self.assertEqual(started.returncode, 0)
+                        finally:
+                            self.cleanup_transient_unit(unit_name)
 
-                self.assertFalse(unit_loaded)
-                self.assertIn(("systemctl", "stop", unit_name), calls)
-                self.assertIn(("systemctl", "reset-failed", unit_name), calls)
-                self.assertEqual(calls.count(("systemctl", "stop", unit_name)), 1)
-                self.assertEqual(calls.count(("systemctl", "reset-failed", unit_name)), 1)
-                self.assertEqual(calls[-1], (
-                    "systemctl", "show", "--property=LoadState", "--value", unit_name,
-                ))
+                    self.assertFalse(unit_loaded)
+                    self.assertIn(("systemctl", "stop", unit_name), calls)
+                    reset_calls = calls.count(("systemctl", "reset-failed", unit_name))
+                    self.assertEqual(reset_calls, int(stop_behavior == "failed"))
+                    self.assertEqual(calls[-1], (
+                        "systemctl", "show", "--property=LoadState", "--value", unit_name,
+                    ))
 
     @staticmethod
     def omv7_v1038_admin_unit():
