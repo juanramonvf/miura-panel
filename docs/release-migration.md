@@ -116,3 +116,28 @@ La automatización se puede probar con workflows de CI, builds y simulaciones en
 raíz temporal. No se debe probar el job de publicación con v1.0.35 ni con una
 versión ya publicada; la primera activación de una release real requiere un
 nuevo tag semántico no utilizado y pasar todas las barreras anteriores.
+
+## Feed predeterminado y compatibilidad heredada
+
+Las instalaciones nuevas usan directamente
+`https://juanramonvf.github.io/miura-panel/updates/stable.json` tanto en el
+actualizador local como en el comprobador fleet. El instalador solo añade ese
+valor al crear una configuración nueva; al actualizar conserva cualquier
+`DASHBOARD_UPDATE_MANIFEST` explícito ya presente. Las instalaciones antiguas
+que siguen consultando `https://sep.mundopeke.es/manifest.json` requieren que el
+operador del dominio mantenga un redirect HTTPS al `stable.json` de Pages; esta
+redirección no se configura ni modifica desde el instalador Miura.
+
+## Automatización protegida de Pages
+
+El workflow `Miura immutable release` crea/verifica la Release en el evento de
+tag y no intenta desplegar Pages desde `refs/tags/*`. Al concluir con éxito, el
+workflow separado `Miura Pages after immutable release` se ejecuta desde el
+workflow presente en la rama predeterminada. Revalida repository, workflow id,
+evento push, conclusión, tag SemVer y SHA del tag; descarga y verifica la
+inmutabilidad y SHA256 de todos los assets antes de construir los feeds. El
+builder elige el mayor SemVer publicado y rechaza bajar `stable.json` o cambiar
+un manifiesto versionado existente. El job de deploy conserva el environment
+protegido `github-pages`, sus aprobaciones y concurrency group; no se usa un
+token alternativo ni se eluden reglas. La recuperación manual
+`publish_pages_only` desde main sigue disponible.

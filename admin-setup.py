@@ -422,17 +422,17 @@ def ensure_prerequisites(skip_unit=False):
     try:
         admin_group=grp.getgrnam('sep-admin')
     except KeyError:
-        die('Falta el grupo de servicio sep-admin. Reinstala Miura Panel v1.0.41 para provisionarlo')
+        die('Falta el grupo de servicio sep-admin. Reinstala Miura Panel v1.0.42 para provisionarlo')
     try:
         account=__import__('pwd').getpwnam('sep-admin')
     except KeyError:
-        die('Falta la cuenta de servicio sep-admin. Reinstala Miura Panel v1.0.41 para provisionarla')
+        die('Falta la cuenta de servicio sep-admin. Reinstala Miura Panel v1.0.42 para provisionarla')
     if account.pw_gid != admin_group.gr_gid or account.pw_shell not in ('/usr/sbin/nologin','/bin/false'):
         die('La cuenta sep-admin no tiene la configuración dedicada esperada; revisa el sistema')
     if admin_group.gr_mem:
         die('El grupo sep-admin tiene miembros adicionales; revisa el sistema antes de activar HTTPS')
     if unit_path is None and not skip_unit:
-        die('Falta server-dashboard-admin.service; reinstala Miura Panel v1.0.41')
+        die('Falta server-dashboard-admin.service; reinstala Miura Panel v1.0.42')
     if skip_unit:return admin_group.gr_gid,account.pw_uid
     st=unit_path.stat()
     if st.st_uid!=0 or st.st_mode&0o022:

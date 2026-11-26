@@ -25,6 +25,7 @@ ROLE_FILE = Path('/var/www/server-dashboard/fleet-role.json')
 SUDOERS = Path('/etc/sudoers.d/spanish-empire-panel-fleet')
 DOCKER_SUDO = Path('/etc/sudoers.d/miura-panel-fleet-docker')
 DOCKER_MARK = Path('/etc/spanish-empire-panel/fleet-docker-enabled')
+UPDATE_MANIFEST = 'https://juanramonvf.github.io/miura-panel/updates/stable.json'
 DOCKER_HELPER = '/usr/local/sbin/miura-panel-fleet-docker'
 DOCKER_SUDO_CONTENT = ('# Miura Panel: solo broker Docker restringido, requiere opt-in local.\n'
                        'Defaults:sep-fleet !requiretty\n'
@@ -357,7 +358,7 @@ def remote_check(target):
 def local_check():
     installed = json.loads(Path('/var/www/server-dashboard/version.json').read_text())['version']
     import urllib.request
-    with urllib.request.urlopen('https://sep.mundopeke.es/manifest.json', timeout=12) as f:
+    with urllib.request.urlopen(UPDATE_MANIFEST, timeout=12) as f:
         manifest = json.load(f)
     latest = manifest['version']
     version = lambda s: tuple(map(int, s.split('.')))

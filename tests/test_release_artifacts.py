@@ -169,6 +169,19 @@ class ReleaseArtifactTests(unittest.TestCase):
                 self.assertLessEqual(member.size, 8 * 1024 * 1024)
                 self.assertEqual(archive.extractfile(member).read(), (ROOT / name.name).read_bytes())
 
+    def test_new_install_uses_pages_feed_and_upgrade_preserves_legacy_url(self):
+        with tempfile.TemporaryDirectory(prefix="miura-feed-default-") as temp:
+            prefix = pathlib.Path(temp) / "root"
+            self.run_installer(prefix, "--demo")
+            config = prefix / "etc/server-dashboard.conf"
+            original = config.read_text(encoding="utf-8")
+            default = "DASHBOARD_UPDATE_MANIFEST=https://juanramonvf.github.io/miura-panel/updates/stable.json"
+            self.assertIn(default, original)
+            legacy = "DASHBOARD_UPDATE_MANIFEST=https://sep.mundopeke.es/manifest.json"
+            config.write_text(original.replace(default, legacy), encoding="utf-8")
+            self.run_installer(prefix, "--upgrade")
+            self.assertIn(legacy, config.read_text(encoding="utf-8"))
+
     def test_demo_mode_survives_v1034_upgrade_and_manual_rollback(self):
         with tempfile.TemporaryDirectory(prefix="miura-release-demo-") as temp:
             prefix = pathlib.Path(temp) / "root"
