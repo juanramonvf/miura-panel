@@ -81,6 +81,36 @@ vm.runInNewContext(SCRIPT, context);
 
 
 class FrontendRefreshTests(unittest.TestCase):
+    def test_update_offer_never_downgrades_installed_semver(self):
+        html = (ROOT / "index.html").read_text(encoding="utf-8")
+        start = html.index("async function checkPanelVersion(){")
+        end = html.index("\n}", start) + 2
+        harness = r"""
+const vm = require('node:vm');
+const btn = { hidden: true, disabled: false, textContent: '', title: '', classList: { add(){}, remove(){} }, onclick: null };
+const document = { getElementById: id => id === 'sepCopyUpdate' ? btn : null };
+const installed = process.argv[1], offered = process.argv[2];
+const context = {
+  fetch: async url => url.startsWith('/version.json')
+    ? { ok: true, json: async () => ({version: installed}) }
+    : { ok: true, json: async () => ({status:'ok',update_available:true,latest:offered}) },
+  document, location: {protocol:'https:'}, sepAuthenticated: true, window: {},
+};
+vm.runInNewContext('('+process.argv[3]+')()', context);
+setImmediate(()=>process.stdout.write(JSON.stringify({hidden:btn.hidden,disabled:btn.disabled,text:btn.textContent})));
+"""
+        for installed, offered, should_offer in (
+            ("1.0.40", "1.0.39", False), ("1.0.40", "1.0.40", False),
+            ("1.0.40", "1.0.41", True), ("1.0.9", "1.0.10", True),
+            ("1.0.40", "1.00.41", False),
+        ):
+            result = subprocess.run(
+                ["node", "-e", harness, installed, offered, html[start:end]], cwd=ROOT,
+                check=True, capture_output=True, text=True, timeout=5,
+            )
+            state = json.loads(result.stdout)
+            self.assertEqual(not state["hidden"] and not state["disabled"], should_offer, state)
+
     def test_https_session_indicator_uses_readable_admin_status(self):
         html = (ROOT / "index.html").read_text(encoding="utf-8")
         start = html.index("fetch('admin-status.json?")
