@@ -743,7 +743,7 @@
   <div class="sep-brand-center">
     <img class="sep-brand-logo" src="/assets/sep-logo.png" alt="Miura Panel" width="42" height="42">
     <div class="sep-brand-stack">
-      <div class="miura-brand-title"><span class="sep-brand">Miura Panel</span><span class="sep-ver">v1.0.40</span></div>
+      <div class="miura-brand-title"><span class="sep-brand">Miura Panel</span><span class="sep-ver">v1.0.41</span></div>
       <div class="sep-brand-help"><a href="https://sep.mundopeke.es/ayuda.html" target="_blank" rel="noopener noreferrer" title="Manual completo de Miura Panel">? Ayuda</a><a href="https://sep.mundopeke.es/novedades.html" target="_blank" rel="noopener noreferrer" title="Historial de cambios">↻ Novedades</a></div>
     </div>
   </div>
@@ -1507,20 +1507,31 @@ async function checkPanelVersion(){
     const r=await fetch('panel-update.json?'+Date.now(),{cache:'no-store'});
     if(!r.ok)return;
     const data=await r.json();
+    const installedResponse=await fetch('/version.json?_='+Date.now(),{cache:'no-store'});
+    if(!installedResponse.ok)throw new Error('No se pudo verificar la versión instalada');
+    const installedData=await installedResponse.json();
+    const parseSemver=v=>{
+      if(typeof v!=='string'||! /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$/.test(v))return null;
+      return v.split('.').map(Number);
+    };
+    const installedVersion=installedData.version;
+    const installedParts=parseSemver(installedVersion);
+    const offeredParts=parseSemver(data.latest);
+    const genuinelyNewer=!!installedParts&&!!offeredParts&&offeredParts.some((part,i)=>part>installedParts[i]&&offeredParts.slice(0,i).every((n,j)=>n===installedParts[j]));
     const btn=document.getElementById('sepCopyUpdate');
     const checkBtn=document.getElementById('sepCheckUpdateNow');
     if(!btn)return;
     if(data.checked_at){const d=new Date(Number(data.checked_at)*1000);btn.title='Última comprobación: '+d.toLocaleString('es-ES');}
     if(checkBtn)checkBtn.hidden=!(location.protocol==='https:'&&sepAuthenticated);
     if(window.__miuraUpdateUI?.running)return;
-    if(data.status==='ok' && data.update_available===true && /^\d+\.\d+\.\d+$/.test(data.latest||'')){
+    if(data.status==='ok' && data.update_available===true && genuinelyNewer){
       btn.classList.remove('current');
       btn.textContent='Nueva versión v'+data.latest+' · Actualizar';
       btn.hidden=false;btn.disabled=false;
       btn.onclick=()=>launchPanelUpdateFromHeader(data.latest,btn);
     }else if(data.status==='ok'){
       btn.classList.add('current');
-      btn.textContent='✓ Miura Panel al día · v1.0.40';
+      btn.textContent='✓ Miura Panel al día · v'+installedVersion;
       btn.hidden=false;btn.disabled=true;btn.onclick=null;
     }else{
       btn.hidden=true;btn.disabled=false;btn.classList.remove('current');btn.onclick=null;
@@ -1852,7 +1863,7 @@ $('#updateAllBtn').addEventListener('click',()=>startDockerUpdate('update_all'))
 /* Detecta el reinicio de Miura Panel después de una actualización sin F5.
    Nunca solicita otra instalación ni interrumpe trabajos del servidor. */
 (()=>{
-  const installedAtLoad='1.0.40';
+  const installedAtLoad='1.0.41';
   let checking=false, refreshing=false;
   async function checkReload(){
     if(checking||refreshing)return;
