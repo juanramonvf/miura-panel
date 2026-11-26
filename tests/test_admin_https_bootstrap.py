@@ -374,7 +374,7 @@ ReadWritePaths=/var/lib/server-dashboard/preferences
             conf.write_text(conf.read_text() + "CUSTOM_KEEP=value\n", encoding="utf-8")
             self.install(prefix, "--upgrade")
             self.assertIn("CUSTOM_KEEP=value", conf.read_text())
-            self.assertEqual(json.loads((prefix / "var/www/server-dashboard/version.json").read_text())["version"], "1.0.41")
+            self.assertEqual(json.loads((prefix / "var/www/server-dashboard/version.json").read_text())["version"], "1.0.42")
             self.assertTrue((prefix / ADMIN_UNIT).is_file())
             self.assertTrue((prefix / "usr/local/sbin/server-dashboard-admin.py").is_file())
 

@@ -22,6 +22,7 @@ from urllib.parse import urlparse
 
 CONFIG = Path('/etc/server-dashboard.conf')
 WEB = Path('/var/www/server-dashboard')
+DEFAULT_UPDATE_MANIFEST = 'https://juanramonvf.github.io/miura-panel/updates/stable.json'
 def local_version():
     """Leer y validar la versión realmente instalada; nunca fijarla en el instalador."""
     try:
@@ -37,12 +38,13 @@ MAX_INSTALLER = 8 * 1024 * 1024
 
 def cfg_get(key):
     if not CONFIG.exists():
-        return ''
+        return DEFAULT_UPDATE_MANIFEST if key == 'DASHBOARD_UPDATE_MANIFEST' else ''
     for raw in CONFIG.read_text(encoding='utf-8').splitlines():
         k, eq, v = raw.strip().partition('=')
         if eq and k.strip() == key:
-            return v.strip().strip('"').strip("'")
-    return ''
+            value = v.strip().strip('"').strip("'")
+            return value or (DEFAULT_UPDATE_MANIFEST if key == 'DASHBOARD_UPDATE_MANIFEST' else '')
+    return DEFAULT_UPDATE_MANIFEST if key == 'DASHBOARD_UPDATE_MANIFEST' else ''
 
 
 def version_tuple(v):
